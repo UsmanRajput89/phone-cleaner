@@ -55,7 +55,7 @@ jobs:
         run: flutter test 2>&1 | tee -a build.log
 
       - name: Build release APK
-        run: flutter build apk --release 2>&1 | tee -a build.log
+        run: flutter build apk --release --build-number=${{ github.run_number }} 2>&1 | tee -a build.log
 
       - name: Publish release
         env:

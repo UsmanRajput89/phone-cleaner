@@ -15,12 +15,14 @@ class MediaThumb extends StatelessWidget {
   final FileEntry entry;
   final int cacheWidth;
   final bool showPlay;
+  final BoxFit fit;
 
   const MediaThumb({
     super.key,
     required this.entry,
     this.cacheWidth = 300,
     this.showPlay = false,
+    this.fit = BoxFit.cover,
   });
 
   Widget _placeholder(BuildContext context, IconData icon) {
@@ -37,21 +39,23 @@ class MediaThumb extends StatelessWidget {
     final p = context.soft;
     switch (entry.kind) {
       case Kind.image:
-        return Image.file(
+        return ColoredBox(
+          color: p.pressed,
+          child: Image.file(
           File(entry.path),
-          fit: BoxFit.cover,
+          fit: fit,
           cacheWidth: cacheWidth,
           gaplessPlayback: true,
           errorBuilder: (_, __, ___) =>
               _placeholder(context, Icons.broken_image_outlined),
-        );
+        ));
       case Kind.video:
         return FutureBuilder<Uint8List?>(
           future: ThumbCache.get(entry.path),
           builder: (context, snap) {
             final bytes = snap.data;
             final base = bytes != null
-                ? Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true)
+                ? Image.memory(bytes, fit: fit, gaplessPlayback: true)
                 : _placeholder(context, Icons.videocam_outlined);
             if (!showPlay) return base;
             return Stack(

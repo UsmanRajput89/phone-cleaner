@@ -541,7 +541,11 @@ class _PhotoCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            MediaThumb(entry: entry, cacheWidth: cacheWidth, showPlay: true),
+            MediaThumb(
+                entry: entry,
+                cacheWidth: cacheWidth,
+                showPlay: true,
+                fit: BoxFit.contain),
             if (showRing)
               Positioned.fill(
                 child: IgnorePointer(
