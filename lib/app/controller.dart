@@ -29,6 +29,7 @@ class AppController extends ChangeNotifier {
     final c = AppController._(store);
     c.themeMode = (await store.getSetting('theme')) ?? 'system';
     c.includeWhatsApp = (await store.getSetting('whatsapp')) == '1';
+    await store.purgeStickers();
     return c;
   }
 

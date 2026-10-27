@@ -13,6 +13,11 @@ class ScanConfig {
   const ScanConfig({required this.root, this.trashName = 'ToDelete'});
 }
 
+bool isStickerDirName(String lowerName) =>
+    lowerName == 'whatsapp stickers' ||
+    lowerName == 'whatsapp animated gifs' ||
+    lowerName == 'stickers';
+
 /// Decides whether a directory (given as path segments relative to the root)
 /// must be skipped. Never descends into app data, hidden folders, caches, or
 /// WhatsApp's Databases / Backups.
@@ -27,6 +32,8 @@ bool shouldSkipDir(List<String> segs) {
   }
 
   final inWhatsApp = lower.any((s) => s.contains('whatsapp'));
+  // Stickers and animated GIFs are never worth reviewing (and are mostly dupes).
+  if (inWhatsApp && isStickerDirName(last)) return true;
   if (inWhatsApp && (last == 'databases' || last == 'backups')) return true;
 
   if (lower[0] == 'android') {

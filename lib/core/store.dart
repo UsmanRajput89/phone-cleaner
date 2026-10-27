@@ -164,6 +164,16 @@ class Store {
     );
   }
 
+  /// Drops sticker / animated-gif rows (from earlier scans) that are not in ToDelete.
+  Future<void> purgeStickers() async {
+    await db.delete(
+      'files',
+      where: "status != 2 AND (lower(path) LIKE '%/whatsapp stickers/%' "
+          "OR lower(path) LIKE '%/whatsapp animated gifs/%' "
+          "OR lower(path) LIKE '%/whatsapp/%/stickers/%')",
+    );
+  }
+
   Future<void> remove(String path) async {
     await db.delete('files', where: 'path = ?', whereArgs: [path]);
   }

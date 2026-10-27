@@ -49,6 +49,15 @@ void main() {
     expect(shouldSkipDir(['WhatsApp', 'Databases']), true);
     expect(shouldSkipDir(['WhatsApp', 'Backups']), true);
     expect(shouldSkipDir(['WhatsApp', 'Media']), false);
+    expect(shouldSkipDir(['WhatsApp', 'Media', 'WhatsApp Stickers']), true);
+    expect(shouldSkipDir(['WhatsApp', 'Media', 'WhatsApp Animated Gifs']), true);
+    expect(
+        shouldSkipDir([
+          'Android', 'media', 'com.whatsapp', 'WhatsApp', 'Media',
+          'WhatsApp Stickers'
+        ]),
+        true);
+    expect(shouldSkipDir(['DCIM', 'Camera']), false);
   });
 
   test('scanTree finds the right files and skips the wrong ones', () {
