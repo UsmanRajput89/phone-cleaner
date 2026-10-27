@@ -30,15 +30,24 @@ checkbox multi-select, "Move N to ToDelete" button, extension filter chips, tap 
 **ToDelete screen:** grid/list of moved files, tap to restore to original path, count and total size.
 Hint text: "Delete from Gallery or the Files app". No delete button.
 
-## Design (minimal, clean, dark-first)
-- Dark by default (OLED black), light theme optional. No blur, no shadows, no heavy animation (old GPU).
-- Palette: bg `#0B0B0D`, surface `#151518`, border `#232328`, text `#F2F2F3`, muted `#8A8A90`,
-  keep `#3DDC97`, remove `#FF5C6C`, accent `#7C8CFF`.
-- Typography: system font, large light-weight numbers, small muted labels, generous spacing, 16px radius.
-- Swipe card: image fills the card, slight tilt while dragging, edge tint green (right) or coral (left),
-  bottom bar with file name, size, date and folder. Two round buttons (remove / keep) for one-hand use.
+## Design: Soft UI (neumorphism), dark. User-chosen. Mockup: Claude design artifact "Phone Cleaner"
+- One surface colour everywhere: bg `#23262E`. Depth comes only from paired shadows:
+  raised = `8px 8px 16px #181A20, -8px -8px 16px #2E323C` (small: 5px/10px, tiny: 3px/6px),
+  pressed/selected/slots = the same shadows with `inset`.
+- Colours: text `#E6E8EE`, muted `#A3A9B8` (keep contrast, never go dimmer), accent `#8FA2FF`,
+  keep `#7DE3B1`, to-delete `#FF9AA5`.
+- Shapes: very round (cards 20-32px radius, buttons and nav fully round). Font: system Roboto,
+  large light-weight numbers, small muted labels.
+- Screens: Home (raised ring disc with inset centre, raised stat cards, inset progress slots, raised nav bar with
+  inset selected item), Swipe (raised photo card in a frame, 3 raised round buttons: To delete / Undo / Keep),
+  List (selected rows inset, unselected raised, raised CTA "Move N to ToDelete"), ToDelete (raised thumbnails,
+  inset info note, inset file tiles). See the design artifact for exact layout.
+- PERFORMANCE RULE (old phone): blurred shadows are expensive. Build the shadow as a reusable `BoxDecoration`
+  constant, wrap every list row and grid tile in `RepaintBoundary`, use the TINY shadow for repeated items
+  (list rows, grid tiles), never animate shadows, and cap blur at 16. If scrolling stutters on the phone,
+  drop shadows on repeated items first and keep them on nav, buttons and the home ring.
 - Empty and finished states get a short calm message, no illustrations.
-- A Design mockup is approved by the user BEFORE the UI is implemented.
+- The UI is implemented only after the user approves the mockup.
 
 ## Architecture
 - Flutter, plain `ChangeNotifier`/`ValueNotifier` state, no heavy state libraries.
