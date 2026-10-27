@@ -31,11 +31,14 @@ checkbox multi-select, "Move N to ToDelete" button, extension filter chips, tap 
 Hint text: "Delete from Gallery or the Files app". No delete button.
 
 ## Design: Soft UI (neumorphism), dark. User-chosen. Mockup: Claude design artifact "Phone Cleaner"
-- One surface colour everywhere: bg `#23262E`. Depth comes only from VERY soft, light paired shadows
-  (user asked for subtle, no glow): dark `#1F2128`, light `#2A2E37`.
-  raised = `5px 5px 10px dark, -5px -5px 10px light` (large elements like the home disc: 7px/14px;
-  small: 3px/6px; tiny: 2px/5px), pressed/selected/slots = the same with `inset` and smaller (2px/5px).
-  No coloured glows; tint overlays on the swipe card max 10% opacity.
+- One surface colour everywhere: bg `#23262E`. USER HATES BLUR, GLOW AND FADE EFFECTS. Depth comes only from
+  crisp, tiny shadows: raised = `0 0 0 1px #2C3039, 0 2px 3px rgba(0,0,0,0.3)` (1px ring + 3px blur max),
+  pressed/selected/slots = `inset 0 2px 3px rgba(0,0,0,0.35)`. NO light counter-shadow, NO gradients, NO
+  translucent overlays, NO BackdropFilter/blur anywhere. Swipe card "to delete" state = solid 3px coral ring +
+  chip; the info strip under the photo is a solid panel, not a fade. Photo placeholders are flat colours.
+- Light theme (also required, follows system, Settings can force one): bg `#E6EAF0`, ring `#D3D8E0`,
+  shadow `rgba(70,80,100,0.22)`, text `#2B3040`, muted `#5E6577`, accent `#3B4FC4`, keep `#17714A`,
+  to-delete `#B02A3E`. Same crisp shadow rules.
 - Colours: text `#E6E8EE`, muted `#A3A9B8` (keep contrast, never go dimmer), accent `#8FA2FF`,
   keep `#7DE3B1`, to-delete `#FF9AA5`.
 - Shapes: very round (cards 20-32px radius, buttons and nav fully round). Font: system Roboto,
