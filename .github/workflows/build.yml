@@ -1,0 +1,83 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Scaffold Android project
+        run: |
+          set -o pipefail
+          {
+            flutter --version
+            flutter create --org com.usman --project-name phone_cleaner --platforms=android /tmp/scaffold
+            rm -rf android
+            cp -r /tmp/scaffold/android ./android
+            python3 tool/patch_android.py
+            mkdir -p ~/.android
+            cp android_overlay/debug.keystore ~/.android/debug.keystore
+          } 2>&1 | tee build.log
+
+      - name: Install sqlite for tests
+        run: sudo apt-get update -y && sudo apt-get install -y libsqlite3-dev 2>&1 | tee -a build.log
+
+      - name: Pub get
+        run: flutter pub get 2>&1 | tee -a build.log
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee -a build.log
+
+      - name: Test
+        run: flutter test 2>&1 | tee -a build.log
+
+      - name: Build release APK
+        run: flutter build apk --release 2>&1 | tee -a build.log
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk PhoneCleaner.apk
+          gh release create "v1.0.${{ github.run_number }}" PhoneCleaner.apk \
+            --title "Phone Cleaner v1.0.${{ github.run_number }}" \
+            --notes "Download PhoneCleaner.apk on your phone and install it." 2>&1 | tee -a build.log
+
+      - name: Push logs
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/logs
+          tail -n 300 build.log > /tmp/logs/build-tail.log 2>/dev/null || echo "no log" > /tmp/logs/build-tail.log
+          echo "${{ job.status }} run ${{ github.run_number }} ${{ github.sha }}" > /tmp/logs/status.txt
+          cd /tmp/logs
+          git init -q -b build-logs
+          git config user.name "build-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add .
+          git commit -qm "build log run ${{ github.run_number }}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" build-logs
