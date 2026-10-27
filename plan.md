@@ -31,9 +31,11 @@ checkbox multi-select, "Move N to ToDelete" button, extension filter chips, tap 
 Hint text: "Delete from Gallery or the Files app". No delete button.
 
 ## Design: Soft UI (neumorphism), dark. User-chosen. Mockup: Claude design artifact "Phone Cleaner"
-- One surface colour everywhere: bg `#23262E`. Depth comes only from paired shadows:
-  raised = `8px 8px 16px #181A20, -8px -8px 16px #2E323C` (small: 5px/10px, tiny: 3px/6px),
-  pressed/selected/slots = the same shadows with `inset`.
+- One surface colour everywhere: bg `#23262E`. Depth comes only from VERY soft, light paired shadows
+  (user asked for subtle, no glow): dark `#1F2128`, light `#2A2E37`.
+  raised = `5px 5px 10px dark, -5px -5px 10px light` (large elements like the home disc: 7px/14px;
+  small: 3px/6px; tiny: 2px/5px), pressed/selected/slots = the same with `inset` and smaller (2px/5px).
+  No coloured glows; tint overlays on the swipe card max 10% opacity.
 - Colours: text `#E6E8EE`, muted `#A3A9B8` (keep contrast, never go dimmer), accent `#8FA2FF`,
   keep `#7DE3B1`, to-delete `#FF9AA5`.
 - Shapes: very round (cards 20-32px radius, buttons and nav fully round). Font: system Roboto,
