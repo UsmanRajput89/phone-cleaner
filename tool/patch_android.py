@@ -53,3 +53,48 @@ if not m:
 tmpl = open('android_overlay/MainActivity.kt').read().replace('PACKAGE_PLACEHOLDER', m.group(1))
 open(target, 'w').write(tmpl)
 print('patched', manifest, 'and', target, 'package', m.group(1))
+
+# --- Pin the signing key: every build must be signed with android_overlay/debug.keystore
+# (a different key per build makes Android refuse to install updates).
+import shutil
+shutil.copy('android_overlay/debug.keystore', 'android/app/debug.keystore')
+kts = 'android/app/build.gradle.kts'
+groovy = 'android/app/build.gradle'
+if os.path.exists(kts):
+    g = open(kts).read()
+    block = (
+        'android {\n'
+        '    signingConfigs {\n'
+        '        getByName("debug") {\n'
+        '            storeFile = file("debug.keystore")\n'
+        '            storePassword = "android"\n'
+        '            keyAlias = "androiddebugkey"\n'
+        '            keyPassword = "android"\n'
+        '        }\n'
+        '    }\n'
+    )
+    path = kts
+elif os.path.exists(groovy):
+    g = open(groovy).read()
+    block = (
+        'android {\n'
+        '    signingConfigs {\n'
+        '        debug {\n'
+        '            storeFile file("debug.keystore")\n'
+        '            storePassword "android"\n'
+        '            keyAlias "androiddebugkey"\n'
+        '            keyPassword "android"\n'
+        '        }\n'
+        '    }\n'
+    )
+    path = groovy
+else:
+    print('no app build.gradle(.kts) found', file=sys.stderr)
+    sys.exit(1)
+if 'debug.keystore' not in g:
+    if 'android {' not in g:
+        print('android { block not found in', path, file=sys.stderr)
+        sys.exit(1)
+    g = g.replace('android {\n', block, 1)
+    open(path, 'w').write(g)
+print('pinned signing key in', path)
