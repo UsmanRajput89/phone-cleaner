@@ -1,0 +1,261 @@
+Flutter 3.47.8 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 737ba8f885 (6 days ago) • 2026-10-22 21:37:31 -0700
+Engine • hash dfd2e6cb7d319db05e3bf1503f3e2ac60f6288a2 (revision cf636b1dfb) (6 days ago) • 2026-10-23 02:13:38.000Z
+Tools • Dart 3.13.7 • DevTools 2.60.0
+Creating project ../../../../../tmp/scaffold...
+Resolving dependencies in `../../../../../tmp/scaffold`...
+Downloading packages...
+Got dependencies in `../../../../../tmp/scaffold`.
+Wrote 35 files.
+
+All done!
+You can find general documentation for Flutter at: https://docs.flutter.dev/
+Detailed API documentation is available at: https://api.flutter.dev/
+If you prefer video documentation, consider: https://www.youtube.com/c/flutterdev
+
+In order to run your application, type:
+
+  $ cd ../../../../../tmp/scaffold
+  $ flutter run
+
+Your application code is in ../../../../../tmp/scaffold/lib/main.dart.
+
+patched android/app/src/main/AndroidManifest.xml and android/app/src/main/kotlin/com/usman/phone_cleaner/MainActivity.kt package com.usman.phone_cleaner
+pinned signing key in android/app/build.gradle.kts
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libsqlite3-dev is already the newest version (3.45.1-1ubuntu2.8).
+0 upgraded, 0 newly installed, 0 to remove and 5 not upgraded.
+Resolving dependencies...
+Downloading packages...
++ async 2.13.1
++ boolean_selector 2.1.2
++ characters 1.4.1
++ clock 1.1.3
++ code_assets 2.1.0
++ collection 1.19.1
++ crypto 3.0.8
++ csslib 1.0.2
++ fake_async 1.3.3
++ ffi 2.2.0
++ file 7.0.1
++ flutter 0.0.0 from sdk flutter
++ flutter_lints 4.0.0 (6.0.0 available)
++ flutter_test 0.0.0 from sdk flutter
++ flutter_web_plugins 0.0.0 from sdk flutter
++ glob 2.2.0
++ hooks 2.2.0
++ html 0.15.7
++ leak_tracker 11.0.2
++ leak_tracker_flutter_testing 3.0.10
++ leak_tracker_testing 3.0.2
++ lints 4.0.0 (6.1.0 available)
++ logging 1.3.0
++ matcher 0.12.20
++ material_color_utilities 0.13.0 (0.13.1 available)
++ meta 1.19.0
++ native_toolchain_c 0.19.5
++ path 1.9.1
++ platform 3.2.0
++ plugin_platform_interface 2.1.8
++ process 5.0.6
++ pub_semver 2.2.1
++ record_use 1.1.1
++ sky_engine 0.0.0 from sdk flutter
++ source_span 1.10.2
++ sqflite 2.4.5
++ sqflite_android 2.4.5
++ sqflite_common 2.5.14
++ sqflite_common_ffi 2.4.5
++ sqflite_darwin 2.4.4+1
++ sqflite_platform_interface 2.4.3
++ sqlite3 3.8.0
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ synchronized 3.5.0
++ term_glyph 1.2.2
++ test_api 0.7.12 (0.7.15 available)
++ typed_data 1.4.0
++ vector_math 2.4.4
++ video_player 2.14.1
++ video_player_android 2.12.2
++ video_player_avfoundation 2.12.3
++ video_player_platform_interface 6.9.0
++ video_player_web 2.4.0
++ vm_service 15.4.0
++ web 1.1.2
++ yaml 3.1.4
+Changed 58 dependencies!
+4 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Upgrading analysis_options.yaml to exclude build and platform directories.
+Analyzing phone-cleaner...                                      
+
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/native.dart:2:8 • unnecessary_import
+warning • A value for optional parameter 'isKeeper' isn't ever given. Try removing the unused parameter • lib/ui/dupes.dart:600:34 • unused_element_parameter
+warning • A value for optional parameter 'viewOnly' isn't ever given. Try removing the unused parameter • lib/ui/dupes.dart:600:57 • unused_element_parameter
+   info • Unnecessary use of string interpolation. Try replacing the string literal with the variable name • lib/ui/files.dart:286:24 • unnecessary_string_interpolations
+   info • The import of 'package:sqflite/sqflite.dart' is unnecessary because all of the used elements are also provided by the import of 'package:sqflite_common_ffi/sqflite_ffi.dart'. Try removing the import directive • test/browse_query_test.dart:4:8 • unnecessary_import
+   info • The import of 'package:sqflite/sqflite.dart' is unnecessary because all of the used elements are also provided by the import of 'package:sqflite_common_ffi/sqflite_ffi.dart'. Try removing the import directive • test/dupes_test.dart:8:8 • unnecessary_import
+   info • The import of 'package:sqflite/sqflite.dart' is unnecessary because all of the used elements are also provided by the import of 'package:sqflite_common_ffi/sqflite_ffi.dart'. Try removing the import directive • test/folders_test.dart:10:8 • unnecessary_import
+   info • The import of 'package:sqflite/sqflite.dart' is unnecessary because all of the used elements are also provided by the import of 'package:sqflite_common_ffi/sqflite_ffi.dart'. Try removing the import directive • test/store_test.dart:4:8 • unnecessary_import
+
+8 issues found. (ran in 5.9s)
+
+::group::✅ Passing tests
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: rank order: safe, live WhatsApp, camera, downloads, other, old WhatsApp
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: pickKeeper prefers live WhatsApp over old, then oldest
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: an existing keeper choice sticks
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: hashFiles matches identical content only
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: dupType buckets files by type
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: voice notes rows are purged but ToDelete rows are kept
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store candidates are same-size files without a hash
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store stats count extras and bytes
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store live WhatsApp copy is kept, others are extras
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store hiding extras removes them from pending queries
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store moving the keeper to ToDelete promotes another copy
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store last remaining copy is no longer a duplicate
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store twinsOnly finds files with an identical twin, trashed or not
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store dupGroupOf reads one group and is null when only one copy is left
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store releaseGroup stops kept copies counting as duplicates
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/dupes_test.dart: store setKeeper switches the kept copy
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/classify_test.dart: extOf handles normal, uppercase, hidden and extension-less names
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/classify_test.dart: kindForExt
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/classify_test.dart: bucketForRelPath
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/classify_test.dart: extLabel
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/folders_test.dart: cleanFolderName strips bad characters
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/folders_test.dart: moveInto moves the file and avoids name clashes
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/folders_test.dart: scanner skips the top-level Safe folder
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/folders_test.dart: markMovedKept counts as kept and remembers origin
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/mover_test.dart: moveToTrash moves the file and creates the folder
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/mover_test.dart: name collisions get a numeric suffix
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/mover_test.dart: restore puts the file back, recreating folders
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/mover_test.dart: restore does not overwrite a file that now exists at the original path
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/mover_test.dart: moving a missing file throws and leaves nothing behind
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: sorting oldest / newest / largest
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: bucket and ext filters
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: paging with offset and excludePaths
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: keep removes a file from the pending queue
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: move and restore update path, status and original path
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: rescanning keeps existing status
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: counts and sums
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/store_test.dart: remove and settings
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/browse_query_test.dart: pathPrefix only matches inside that folder
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/browse_query_test.dart: underscore in prefix is not a wildcard
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/browse_query_test.dart: duplicatesOnly finds same name and size
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/browse_query_test.dart: monthsUnder groups by month
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/browse_query_test.dart: month filter works
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/delete_test.dart: isInside accepts only paths strictly inside the folder
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/delete_test.dart: deleteFromTrash deletes inside ToDelete only
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/delete_test.dart: deleteFromTrash treats a missing file as already deleted
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/scanner_test.dart: shouldSkipDir rules
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/scanner_test.dart: scanTree finds the right files and skips the wrong ones
+✅ /home/runner/work/phone-cleaner/phone-cleaner/test/scanner_test.dart: scanTree on a missing root returns empty
+::endgroup::
+
+🎉 48 tests passed.
+Running Gradle task 'assembleRelease'...                        
+Loading package information...                                                  
+Loading local repository...                                                     
+[                                       ] 3% Loading local repository...        
+[                                       ] 3% Fetch remote repository...         
+[=                                      ] 3% Fetch remote repository...         
+[=                                      ] 4% Fetch remote repository...         
+[=                                      ] 5% Fetch remote repository...         
+[==                                     ] 5% Fetch remote repository...         
+[==                                     ] 6% Fetch remote repository...         
+[==                                     ] 7% Fetch remote repository...         
+[==                                     ] 7% Computing updates...               
+[===                                    ] 8% Computing updates...               
+[===                                    ] 10% Computing updates...              
+[===                                    ] 10% Installing NDK (Side by side) 28.2
+[===                                    ] 10% Downloading android-ndk-r28c-linux
+[====                                   ] 10% Downloading android-ndk-r28c-linux
+[====                                   ] 11% Downloading android-ndk-r28c-linux
+[====                                   ] 12% Downloading android-ndk-r28c-linux
+[=====                                  ] 13% Downloading android-ndk-r28c-linux
+[=====                                  ] 14% Downloading android-ndk-r28c-linux
+[=====                                  ] 15% Downloading android-ndk-r28c-linux
+[======                                 ] 15% Downloading android-ndk-r28c-linux
+[======                                 ] 16% Downloading android-ndk-r28c-linux
+[======                                 ] 17% Downloading android-ndk-r28c-linux
+[=======                                ] 18% Downloading android-ndk-r28c-linux
+[=======                                ] 19% Downloading android-ndk-r28c-linux
+[=======                                ] 20% Downloading android-ndk-r28c-linux
+[========                               ] 20% Downloading android-ndk-r28c-linux
+[========                               ] 21% Downloading android-ndk-r28c-linux
+[========                               ] 22% Downloading android-ndk-r28c-linux
+[=========                              ] 23% Downloading android-ndk-r28c-linux
+[=========                              ] 24% Downloading android-ndk-r28c-linux
+[=========                              ] 25% Downloading android-ndk-r28c-linux
+[==========                             ] 25% Downloading android-ndk-r28c-linux
+[==========                             ] 26% Downloading android-ndk-r28c-linux
+[==========                             ] 27% Downloading android-ndk-r28c-linux
+[===========                            ] 28% Downloading android-ndk-r28c-linux
+[===========                            ] 29% Downloading android-ndk-r28c-linux
+[===========                            ] 30% Downloading android-ndk-r28c-linux
+[============                           ] 30% Downloading android-ndk-r28c-linux
+[============                           ] 31% Downloading android-ndk-r28c-linux
+[============                           ] 32% Downloading android-ndk-r28c-linux
+[============                           ] 33% Downloading android-ndk-r28c-linux
+[============                           ] 33% Unzipping...                      
+[============                           ] 33% Unzipping... android-ndk-r28c/    
+[============                           ] 33% Unzipping... android-ndk-r28c/READ
+[=============                          ] 33% Unzipping... android-ndk-r28c/READ
+[=============                          ] 33% Unzipping... android-ndk-r28c/meta
+[=============                          ] 33% Unzipping... android-ndk-r28c/shad
+[=============                          ] 33% Unzipping... android-ndk-r28c/ndk-
+[=============                          ] 33% Unzipping... android-ndk-r28c/wrap
+[=============                          ] 33% Unzipping... android-ndk-r28c/ndk-
+[=============                          ] 33% Unzipping... android-ndk-r28c/tool
+[=============                          ] 34% Unzipping... android-ndk-r28c/tool
+[=============                          ] 35% Unzipping... android-ndk-r28c/tool
+[==============                         ] 35% Unzipping... android-ndk-r28c/tool
+[==============                         ] 36% Unzipping... android-ndk-r28c/tool
+[==============                         ] 37% Unzipping... android-ndk-r28c/tool
+[===============                        ] 38% Unzipping... android-ndk-r28c/tool
+[===============                        ] 39% Unzipping... android-ndk-r28c/tool
+[===============                        ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 41% Unzipping... android-ndk-r28c/tool
+[================                       ] 42% Unzipping... android-ndk-r28c/tool
+[=================                      ] 43% Unzipping... android-ndk-r28c/tool
+[=================                      ] 44% Unzipping... android-ndk-r28c/tool
+[=================                      ] 45% Unzipping... android-ndk-r28c/tool
+[==================                     ] 45% Unzipping... android-ndk-r28c/tool
+[==================                     ] 46% Unzipping... android-ndk-r28c/tool
+[==================                     ] 47% Unzipping... android-ndk-r28c/tool
+[===================                    ] 48% Unzipping... android-ndk-r28c/tool
+[===================                    ] 49% Unzipping... android-ndk-r28c/tool
+[===================                    ] 50% Unzipping... android-ndk-r28c/tool
+[====================                   ] 50% Unzipping... android-ndk-r28c/tool
+[====================                   ] 51% Unzipping... android-ndk-r28c/tool
+[====================                   ] 52% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 53% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 54% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 54% Unzipping... android-ndk-r28c/buil
+[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
+[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
+[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
+[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
+[=====================                  ] 54% Unzipping... android-ndk-r28c/pyth
+[=====================                  ] 54% Unzipping... android-ndk-r28c/preb
+[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
+[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
+[=====================                  ] 54% Unzipping... android-ndk-r28c/simp
+[=====================                  ] 55% Unzipping... android-ndk-r28c/simp
+[=====================                  ] 55% Unzipping... android-ndk-r28c/CHAN
+[=======================================] 100% Unzipping... android-ndk-r28c/CHA
+
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 5476 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Caught exception: Already watching path: /home/runner/work/phone-cleaner/phone-cleaner/android
+Running Gradle task 'assembleRelease'...                          211.1s
+✓ Built build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk (15.7MB)
+✓ Built build/app/outputs/flutter-apk/app-arm64-v8a-release.apk (18.3MB)
+✓ Built build/app/outputs/flutter-apk/app-x86_64-release.apk (19.8MB)
+expected fe8f1393a167f161a337d4db58796edd6d1c7262856c64adac21b172b23727ea
+actual   fe8f1393a167f161a337d4db58796edd6d1c7262856c64adac21b172b23727ea (build/app/outputs/flutter-apk/app-arm64-v8a-release.apk)
+actual   fe8f1393a167f161a337d4db58796edd6d1c7262856c64adac21b172b23727ea (build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk)
+https://github.com/UsmanRajput89/phone-cleaner/releases/tag/v1.0.16
