@@ -39,7 +39,10 @@ class _ShellState extends State<Shell> {
         );
         break;
       case 2:
-        body = const ToDeletePage(key: ValueKey('todelete'));
+        body = ToDeletePage(
+          key: const ValueKey('todelete'),
+          onSelectionChanged: (v) => setState(() => _selecting = v),
+        );
         break;
       case 3:
         body = const BrowsePage(key: ValueKey('browse'));
@@ -64,7 +67,10 @@ class _ShellState extends State<Shell> {
                   _selecting = false;
                 }),
                 onSwipe: _openSwipe,
-                onFiles: () => setState(() => _tab = 1),
+                onFiles: () => setState(() {
+                  _tab = 1;
+                  _selecting = false;
+                }),
                 onBrowse: () => setState(() {
                   _tab = 3;
                   _selecting = false;

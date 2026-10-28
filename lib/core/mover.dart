@@ -12,6 +12,23 @@ class Mover {
 
   Future<String> moveToTrash(String path) => moveInto(path, trashDir);
 
+  /// True only for a path strictly inside [dir] (after normalising `..`).
+  static bool isInside(String dir, String path) =>
+      p.isWithin(p.normalize(dir), p.normalize(path));
+
+  /// Permanently deletes a regular file, but ONLY if it lives inside the
+  /// ToDelete folder. Returns true if the file is gone afterwards.
+  Future<bool> deleteFromTrash(String path) async {
+    if (!isInside(trashDir, path)) {
+      throw ArgumentError('Refusing to delete outside ToDelete: $path');
+    }
+    final type = FileSystemEntity.typeSync(path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return true;
+    if (type != FileSystemEntityType.file) return false;
+    await File(path).delete();
+    return !File(path).existsSync();
+  }
+
   /// Moves a file into [dir] (created if missing). Returns the new path.
   Future<String> moveInto(String path, String dir) async {
     await Directory(dir).create(recursive: true);

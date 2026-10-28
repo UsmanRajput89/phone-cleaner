@@ -231,6 +231,23 @@ class AppController extends ChangeNotifier {
     return newPath;
   }
 
+  /// Restores a file from ToDelete. Files with no known origin go to Restored/.
+  Future<String> restoreEntry(FileEntry e) {
+    final orig = e.origPath ?? p.join(rootPath, 'Restored', e.name);
+    return restore(e.path, orig, Status.kept);
+  }
+
+  /// Permanently deletes a file that is in ToDelete. Returns true if gone.
+  Future<bool> deleteFromTrash(FileEntry e) async {
+    if (e.status != Status.todelete) return false;
+    final gone = await mover.deleteFromTrash(e.path);
+    if (gone) {
+      await store.remove(e.path);
+      rescanner.add([e.path]);
+    }
+    return gone;
+  }
+
   /// Moves a file from ToDelete back to [origPath]. Returns the new path.
   Future<String> restore(String currentPath, String origPath, int status) async {
     final newPath = await mover.restore(currentPath, origPath);
