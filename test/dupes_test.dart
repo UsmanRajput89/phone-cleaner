@@ -1,0 +1,145 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:phone_cleaner/core/dupes.dart';
+import 'package:phone_cleaner/core/models.dart';
+import 'package:phone_cleaner/core/store.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+const safe = '/storage/emulated/0/Safe';
+const wa = '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images';
+const old = '/storage/emulated/0/WhatsApp/Media/WhatsApp Images';
+
+ScannedFile f(String path, {int size = 100, int mtime = 1, Bucket b = Bucket.whatsapp}) =>
+    ScannedFile(
+        path: path, size: size, mtime: mtime, bucket: b, kind: Kind.image, ext: 'jpg');
+
+void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  test('rank order: safe, live WhatsApp, camera, downloads, other, old WhatsApp', () {
+    final ranks = [
+      '$safe/Ann/a.jpg',
+      '$wa/a.jpg',
+      '$wa/Sent/a.jpg',
+      '/storage/emulated/0/DCIM/Camera/a.jpg',
+      '/storage/emulated/0/Download/a.jpg',
+      '/storage/emulated/0/Pictures/a.jpg',
+      '$old/a.jpg',
+    ].map((x) => dupRank(x, safeRoot: safe)).toList();
+    expect(ranks, [0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  test('pickKeeper prefers live WhatsApp over old, then oldest', () {
+    expect(
+        pickKeeper([
+          DupCandidate('$old/a.jpg', 1, 0),
+          DupCandidate('$wa/a.jpg', 9, 0),
+        ], safeRoot: safe),
+        '$wa/a.jpg');
+    expect(
+        pickKeeper([
+          DupCandidate('$wa/b.jpg', 9, 0),
+          DupCandidate('$wa/a.jpg', 3, 0),
+        ], safeRoot: safe),
+        '$wa/a.jpg');
+  });
+
+  test('an existing keeper choice sticks', () {
+    expect(
+        pickKeeper([
+          DupCandidate('$old/a.jpg', 1, 1),
+          DupCandidate('$wa/a.jpg', 9, 2),
+        ], safeRoot: safe),
+        '$old/a.jpg');
+  });
+
+  test('hashFiles matches identical content only', () {
+    final dir = Directory.systemTemp.createTempSync('dupes');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/a').writeAsBytesSync([1, 2, 3, 4]);
+    File('${dir.path}/b').writeAsBytesSync([1, 2, 3, 4]);
+    File('${dir.path}/c').writeAsBytesSync([1, 2, 3, 5]);
+    final h = hashFiles(['${dir.path}/a', '${dir.path}/b', '${dir.path}/c', '${dir.path}/nope']);
+    expect(h[0], h[1]);
+    expect(h[0], isNot(h[2]));
+    expect(h[3], startsWith('e:'));
+  });
+
+  group('store', () {
+    late Store store;
+
+    setUp(() async {
+      store = await Store.open(path: inMemoryDatabasePath);
+      store.safeRoot = safe;
+      await store.insertScanned([
+        f('$wa/a.jpg'),
+        f('$old/a.jpg'),
+        f('/storage/emulated/0/DCIM/Camera/a.jpg', b: Bucket.camera),
+        f('$wa/solo.jpg', size: 55),
+        f('$wa/b.jpg', size: 100, mtime: 5),
+      ]);
+      await store.setHashes({
+        '$wa/a.jpg': '100-x',
+        '$old/a.jpg': '100-x',
+        '/storage/emulated/0/DCIM/Camera/a.jpg': '100-x',
+        '$wa/b.jpg': '100-y',
+      });
+      await store.assignDupRoles();
+    });
+
+    test('candidates are same-size files without a hash', () async {
+      final c = await store.dupCandidates();
+      expect(c, isEmpty);
+    });
+
+    test('stats count extras and bytes', () async {
+      final s = await store.dupStats();
+      expect(s.groups, 1);
+      expect(s.extras, 2);
+      expect(s.bytes, 200);
+    });
+
+    test('live WhatsApp copy is kept, others are extras', () async {
+      final g = (await store.dupGroups()).single;
+      expect(g.keeper.path, '$wa/a.jpg');
+      expect(g.extras.length, 2);
+    });
+
+    test('hiding extras removes them from pending queries', () async {
+      const q = FileQuery(limit: 100);
+      expect((await store.query(q)).length, 5);
+      store.hideDupes = true;
+      final shown = (await store.query(q)).map((e) => e.path).toSet();
+      expect(shown, {'$wa/a.jpg', '$wa/solo.jpg', '$wa/b.jpg'});
+      expect(await store.count(q), 3);
+    });
+
+    test('moving the keeper to ToDelete promotes another copy', () async {
+      await store.markMoved('$wa/a.jpg', '/storage/emulated/0/ToDelete/a.jpg');
+      final g = (await store.dupGroups()).single;
+      expect(g.members.length, 2);
+      expect(g.keeper.path, '/storage/emulated/0/DCIM/Camera/a.jpg');
+    });
+
+    test('last remaining copy is no longer a duplicate', () async {
+      await store.markMoved('$old/a.jpg', '/storage/emulated/0/ToDelete/o.jpg');
+      await store.markMoved('/storage/emulated/0/DCIM/Camera/a.jpg',
+          '/storage/emulated/0/ToDelete/c.jpg');
+      await store.reassignGroup('100-x');
+      expect(await store.dupGroups(), isEmpty);
+      store.hideDupes = true;
+      expect(await store.count(const FileQuery(limit: 100)), 3);
+    });
+
+    test('setKeeper switches the kept copy', () async {
+      await store.setKeeper('100-x', '$old/a.jpg');
+      final g = (await store.dupGroups()).single;
+      expect(g.keeper.path, '$old/a.jpg');
+    });
+  });
+}

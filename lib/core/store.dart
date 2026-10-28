@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import 'dupes.dart';
 import 'models.dart';
 
 class _Where {
@@ -25,13 +26,22 @@ String _order(SortMode s) {
 class Store {
   final Database db;
 
+  /// When true, extra copies of duplicate files are left out of the review
+  /// lists (Swipe, Browse, Files). Set by the app controller.
+  bool hideDupes = false;
+
+  /// Files you filed into Safe are always the copy that stays.
+  String safeRoot = '/storage/emulated/0/Safe';
+
   Store(this.db);
+
+  String get _hideSql => hideDupes ? ' AND dup != 2' : '';
 
   static Future<Store> open({String? path}) async {
     final dbPath = path ?? p.join(await getDatabasesPath(), 'phone_cleaner.db');
     final db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('CREATE TABLE files('
             'path TEXT PRIMARY KEY, '
@@ -41,10 +51,23 @@ class Store {
             'kind TEXT NOT NULL, '
             'ext TEXT NOT NULL, '
             'status INTEGER NOT NULL DEFAULT 0, '
-            'orig_path TEXT)');
+            'orig_path TEXT, '
+            'hash TEXT, '
+            'dup INTEGER NOT NULL DEFAULT 0)');
         await db.execute('CREATE INDEX idx_files_q ON files(status, kind, bucket)');
         await db.execute(
             'CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        await db.execute('CREATE INDEX idx_files_hash ON files(hash)');
+        await db.execute('CREATE INDEX idx_files_size ON files(size)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE files ADD COLUMN hash TEXT');
+          await db.execute(
+              'ALTER TABLE files ADD COLUMN dup INTEGER NOT NULL DEFAULT 0');
+          await db.execute('CREATE INDEX idx_files_hash ON files(hash)');
+          await db.execute('CREATE INDEX idx_files_size ON files(size)');
+        }
       },
     );
     return Store(db);
@@ -123,6 +146,9 @@ class Store {
       parts.add("strftime('%Y-%m', mtime / 1000, 'unixepoch', 'localtime') = ?");
       args.add(month);
     }
+    if (hideDupes && q.status == Status.pending) {
+      parts.add('dup != 2');
+    }
     if (q.duplicatesOnly) {
       parts.add('(size, $_baseName) IN (SELECT size, $_baseName FROM files '
           "WHERE status = 0 AND kind = 'other' GROUP BY 1, 2 HAVING COUNT(*) > 1)");
@@ -141,6 +167,7 @@ class Store {
         "SELECT strftime('%Y-%m', mtime / 1000, 'unixepoch', 'localtime') AS m, "
         'COUNT(*) AS c, COALESCE(SUM(size), 0) AS s FROM files '
         "WHERE status = ? AND bucket = ? AND path LIKE ? ESCAPE '\\' "
+        '${status == Status.pending ? _hideSql : ''} '
         'GROUP BY m ORDER BY m DESC',
         [status, bucket, '$esc/%']);
   }
@@ -193,12 +220,24 @@ class Store {
   }
 
   Future<void> markMoved(String oldPath, String newPath) async {
+    final before = await db.query('files',
+        columns: ['hash', 'dup'], where: 'path = ?', whereArgs: [oldPath]);
     await db.update(
       'files',
-      {'path': newPath, 'status': Status.todelete, 'orig_path': oldPath},
+      {
+        'path': newPath,
+        'status': Status.todelete,
+        'orig_path': oldPath,
+        'dup': 0,
+      },
       where: 'path = ?',
       whereArgs: [oldPath],
     );
+    if (before.isNotEmpty && before.first['hash'] != null) {
+      final dup = ((before.first['dup'] as num?) ?? 0).toInt();
+      // The copy that stays was removed: promote another one.
+      if (dup == 1) await reassignGroup(before.first['hash'] as String);
+    }
   }
 
   Future<void> markRestored(String currentPath, String newPath, int status) async {
@@ -208,6 +247,11 @@ class Store {
       where: 'path = ?',
       whereArgs: [currentPath],
     );
+    final r = await db.query('files',
+        columns: ['hash'], where: 'path = ?', whereArgs: [newPath]);
+    if (r.isNotEmpty && r.first['hash'] != null) {
+      await reassignGroup(r.first['hash'] as String);
+    }
   }
 
   /// Drops sticker / animated-gif rows (from earlier scans) that are not in ToDelete.
@@ -228,6 +272,7 @@ class Store {
     while (true) {
       final rows = await db.rawQuery(
           'SELECT path, size FROM files WHERE bucket = ? AND status = ? '
+          '${status == Status.pending ? _hideSql : ''} '
           'LIMIT $page OFFSET $offset',
           [bucket, status]);
       for (final r in rows) {
@@ -271,7 +316,8 @@ class Store {
   Future<Counts> counts({bool whatsappOff = false}) async {
     final rows = await db.rawQuery(
         'SELECT bucket, status, COUNT(*) AS c, COALESCE(SUM(size), 0) AS s '
-        'FROM files GROUP BY bucket, status');
+        'FROM files ${hideDupes ? 'WHERE NOT (status = 0 AND dup = 2) ' : ''}'
+        'GROUP BY bucket, status');
     final map = <Bucket, BucketCount>{
       for (final b in Bucket.values) b: BucketCount(),
     };
@@ -291,6 +337,124 @@ class Store {
       }
     }
     return Counts(map, trashBytes, whatsappOff: whatsappOff);
+  }
+
+  // ---- duplicates ----
+
+  /// Same-size files that still need a content hash.
+  Future<List<Map<String, Object?>>> dupCandidates({int limit = 100000}) {
+    return db.rawQuery(
+        'SELECT path, size FROM files WHERE status IN (0, 1) AND size > 0 '
+        'AND hash IS NULL AND size IN (SELECT size FROM files '
+        'WHERE status IN (0, 1) AND size > 0 GROUP BY size HAVING COUNT(*) > 1) '
+        'ORDER BY size ASC, path ASC LIMIT ?',
+        [limit]);
+  }
+
+  Future<void> setHashes(Map<String, String> hashes) async {
+    final batch = db.batch();
+    hashes.forEach((path, hash) {
+      batch.update('files', {'hash': hash}, where: 'path = ?', whereArgs: [path]);
+    });
+    await batch.commit(noResult: true);
+  }
+
+  List<DupCandidate> _cands(List<Map<String, Object?>> rows) => [
+        for (final r in rows)
+          DupCandidate(r['path'] as String, (r['mtime'] as num).toInt(),
+              ((r['dup'] as num?) ?? 0).toInt())
+      ];
+
+  /// Marks one keeper and the extras for every group of identical files.
+  Future<void> assignDupRoles() async {
+    final rows = await db.rawQuery(
+        'SELECT path, hash, mtime, dup FROM files WHERE hash IS NOT NULL '
+        'AND status IN (0, 1) AND hash IN (SELECT hash FROM files '
+        'WHERE hash IS NOT NULL AND status IN (0, 1) '
+        'GROUP BY hash HAVING COUNT(*) > 1) ORDER BY hash');
+    final groups = <String, List<Map<String, Object?>>>{};
+    for (final r in rows) {
+      groups.putIfAbsent(r['hash'] as String, () => []).add(r);
+    }
+    final roles = <String, int>{};
+    groups.forEach((hash, list) {
+      final keep = pickKeeper(_cands(list), safeRoot: safeRoot);
+      for (final r in list) {
+        final path = r['path'] as String;
+        roles[path] = path == keep ? 1 : 2;
+      }
+    });
+    await db.transaction((txn) async {
+      await txn.rawUpdate('UPDATE files SET dup = 0 WHERE dup != 0');
+      final batch = txn.batch();
+      roles.forEach((path, role) {
+        batch.update('files', {'dup': role}, where: 'path = ?', whereArgs: [path]);
+      });
+      await batch.commit(noResult: true);
+    });
+  }
+
+  /// Re-decides the keeper for one group (after a copy left or came back).
+  Future<void> reassignGroup(String hash) async {
+    final rows = await db.rawQuery(
+        'SELECT path, mtime, dup FROM files WHERE hash = ? AND status IN (0, 1)',
+        [hash]);
+    final batch = db.batch();
+    if (rows.length < 2) {
+      batch.update('files', {'dup': 0}, where: 'hash = ?', whereArgs: [hash]);
+    } else {
+      final keep = pickKeeper(_cands(rows), safeRoot: safeRoot);
+      for (final r in rows) {
+        final path = r['path'] as String;
+        batch.update('files', {'dup': path == keep ? 1 : 2},
+            where: 'path = ?', whereArgs: [path]);
+      }
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Makes [path] the copy that stays in its group.
+  Future<void> setKeeper(String hash, String path) async {
+    final batch = db.batch();
+    batch.update('files', {'dup': 2},
+        where: 'hash = ? AND status IN (0, 1)', whereArgs: [hash]);
+    batch.update('files', {'dup': 1}, where: 'path = ?', whereArgs: [path]);
+    await batch.commit(noResult: true);
+  }
+
+  Future<DupStats> dupStats() async {
+    final r = await db.rawQuery(
+        'SELECT COUNT(*) AS g, COALESCE(SUM(c - 1), 0) AS e, '
+        'COALESCE(SUM((c - 1) * size), 0) AS b FROM ('
+        'SELECT size, COUNT(*) AS c FROM files WHERE hash IS NOT NULL '
+        'AND status IN (0, 1) GROUP BY hash HAVING COUNT(*) > 1)');
+    final row = r.first;
+    return DupStats((row['g'] as num).toInt(), (row['e'] as num).toInt(),
+        (row['b'] as num).toInt());
+  }
+
+  /// Groups of identical files, biggest savings first.
+  Future<List<DupGroup>> dupGroups({int limit = 20, int offset = 0}) async {
+    final heads = await db.rawQuery(
+        'SELECT hash, size, COUNT(*) AS c FROM files WHERE hash IS NOT NULL '
+        'AND status IN (0, 1) GROUP BY hash HAVING COUNT(*) > 1 '
+        'ORDER BY (COUNT(*) - 1) * size DESC, hash ASC LIMIT ? OFFSET ?',
+        [limit, offset]);
+    if (heads.isEmpty) return [];
+    final hashes = [for (final h in heads) h['hash'] as String];
+    final rows = await db.rawQuery(
+        'SELECT * FROM files WHERE status IN (0, 1) AND hash IN (${_ph(hashes.length)}) '
+        'ORDER BY CASE dup WHEN 1 THEN 0 ELSE 1 END, mtime ASC, path ASC',
+        hashes);
+    final by = <String, List<FileEntry>>{};
+    for (final r in rows) {
+      by.putIfAbsent(r['hash'] as String, () => []).add(FileEntry.fromRow(r));
+    }
+    return [
+      for (final h in heads)
+        DupGroup(h['hash'] as String, (h['size'] as num).toInt(),
+            by[h['hash'] as String] ?? const [])
+    ];
   }
 
   Future<String?> getSetting(String key) async {

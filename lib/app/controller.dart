@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
 import 'package:path/path.dart' as p;
 
 import '../core/classify.dart';
+import '../core/dupes.dart';
 import '../core/models.dart';
 import '../core/mover.dart';
 import '../core/scanner.dart';
@@ -24,7 +26,17 @@ class AppController extends ChangeNotifier {
 
   String themeMode = 'system';
   bool includeWhatsApp = false;
+  bool hideDupes = true;
   Counts? counts;
+  DupStats dupStats = DupStats.none;
+  bool dupEverScanned = false;
+  bool dupScanning = false;
+  int dupDone = 0;
+  int dupTotal = 0;
+  bool _dupCancel = false;
+  bool dupMoving = false;
+  int dupMoved = 0;
+  int dupMoveTotal = 0;
   bool scanning = false;
   Timer? _countsTimer;
 
@@ -35,6 +47,9 @@ class AppController extends ChangeNotifier {
     final c = AppController._(store);
     c.themeMode = (await store.getSetting('theme')) ?? 'system';
     c.includeWhatsApp = (await store.getSetting('whatsapp')) == '1';
+    c.hideDupes = (await store.getSetting('hide_dupes')) != '0';
+    store.hideDupes = c.hideDupes;
+    c.dupEverScanned = (await store.getSetting('dup_scanned')) == '1';
     await store.purgeStickers();
     return c;
   }
@@ -62,9 +77,127 @@ class AppController extends ChangeNotifier {
     await refreshCounts();
   }
 
+  Future<void> setHideDupes(bool value) async {
+    hideDupes = value;
+    store.hideDupes = value;
+    await store.setSetting('hide_dupes', value ? '1' : '0');
+    await refreshCounts();
+  }
+
   Future<void> refreshCounts() async {
     counts = await store.counts(whatsappOff: !includeWhatsApp);
+    dupStats = await store.dupStats();
     notifyListeners();
+  }
+
+  void cancelDupScan() => _dupCancel = true;
+
+  /// Finds byte-identical files: groups by size, then hashes only the files
+  /// that share a size with another one. Hashes are cached, so a stopped scan
+  /// carries on where it left off. Small batches keep the old phone responsive.
+  Future<void> findDuplicates() async {
+    if (dupScanning || dupMoving) return;
+    dupScanning = true;
+    _dupCancel = false;
+    dupDone = 0;
+    dupTotal = 0;
+    notifyListeners();
+    try {
+      final rows = await store.dupCandidates();
+      dupTotal = rows.length;
+      notifyListeners();
+      var i = 0;
+      while (i < rows.length && !_dupCancel) {
+        final batch = <String>[];
+        var bytes = 0;
+        while (i < rows.length && batch.length < 40 && (batch.isEmpty || bytes < 48 * 1024 * 1024)) {
+          batch.add(rows[i]['path'] as String);
+          bytes += (rows[i]['size'] as num).toInt();
+          i++;
+        }
+        final hashes = await Isolate.run(() => hashFiles(batch));
+        await store.setHashes({
+          for (var k = 0; k < batch.length; k++) batch[k]: hashes[k],
+        });
+        dupDone = i;
+        notifyListeners();
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      await store.assignDupRoles();
+      if (!_dupCancel) {
+        dupEverScanned = true;
+        await store.setSetting('dup_scanned', '1');
+      }
+    } finally {
+      dupScanning = false;
+    }
+    await refreshCounts();
+  }
+
+  /// Moves the extra copies of [groups] into ToDelete; the keeper stays.
+  /// Returns [moved, failed, bytes].
+  Future<List<int>> moveExtras(List<DupGroup> groups) async {
+    var moved = 0, failed = 0, bytes = 0;
+    for (final g in groups) {
+      final keeper = g.keeper;
+      for (final e in g.members) {
+        if (identical(e, keeper)) continue;
+        try {
+          await moveToTrash(e);
+          moved++;
+          bytes += e.size;
+        } catch (_) {
+          failed++;
+        }
+        dupMoved++;
+        if (dupMoved % 10 == 0) notifyListeners();
+      }
+      await store.reassignGroup(g.hash);
+      await Future<void>.delayed(Duration.zero);
+    }
+    return [moved, failed, bytes];
+  }
+
+  Future<List<int>> moveExtrasOf(List<DupGroup> groups) async {
+    if (dupMoving || dupScanning) return [0, 0, 0];
+    dupMoving = true;
+    dupMoved = 0;
+    dupMoveTotal = groups.fold<int>(0, (a, g) => a + g.members.length - 1);
+    notifyListeners();
+    try {
+      return await moveExtras(groups);
+    } finally {
+      dupMoving = false;
+      await refreshCounts();
+      refreshCountsSoon();
+    }
+  }
+
+  /// Moves every extra copy, one batch of groups at a time.
+  Future<List<int>> moveAllExtras() async {
+    if (dupMoving || dupScanning) return [0, 0, 0];
+    dupMoving = true;
+    dupMoved = 0;
+    dupMoveTotal = dupStats.extras;
+    notifyListeners();
+    var moved = 0, failed = 0, bytes = 0;
+    final seen = <String>{};
+    try {
+      while (true) {
+        final groups = await store.dupGroups(limit: 50);
+        final fresh = groups.where((g) => seen.add(g.hash)).toList();
+        if (fresh.isEmpty) break;
+        final r = await moveExtras(fresh);
+        moved += r[0];
+        failed += r[1];
+        bytes += r[2];
+      }
+    } finally {
+      dupMoving = false;
+      await refreshCounts();
+      refreshCountsSoon();
+    }
+    return [moved, failed, bytes];
   }
 
   void refreshCountsSoon() {

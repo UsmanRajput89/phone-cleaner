@@ -6,6 +6,7 @@ import '../app/controller.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/models.dart';
+import 'dupes.dart';
 import 'settings.dart';
 import 'soft.dart';
 
@@ -113,6 +114,8 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           SoftPill(label: 'Continue swiping', onTap: onOpenSwipe),
+          const SizedBox(height: 14),
+          _DupCard(c: c),
           const SizedBox(height: 22),
           Text(
             'LEFT TO REVIEW',
@@ -250,4 +253,57 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
       old.progress != progress || old.color != color;
+}
+
+class _DupCard extends StatelessWidget {
+  final AppController c;
+
+  const _DupCard({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.soft;
+    final s = c.dupStats;
+    final String title;
+    final String sub;
+    if (c.dupScanning) {
+      title = 'Checking for duplicates';
+      sub = '${formatInt(c.dupDone)} of ${formatInt(c.dupTotal)} files';
+    } else if (!c.dupEverScanned) {
+      title = 'Find duplicates';
+      sub = 'Spot identical copies, mostly WhatsApp';
+    } else if (s.extras == 0) {
+      title = 'Duplicates';
+      sub = 'No identical files found';
+    } else {
+      title = 'Duplicates: ${formatInt(s.extras)} extra copies';
+      sub = '${formatBytes(s.bytes)} you can free';
+    }
+    return SoftTap(
+      label: 'Duplicates',
+      onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const DuplicatesPage())),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: raisedDeco(p),
+        child: Row(
+          children: [
+            Icon(Icons.copy_all_rounded, color: p.accent, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: ts(context, 15)),
+                  const SizedBox(height: 2),
+                  Text(sub, style: ts(context, 12, color: p.muted)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: p.muted),
+          ],
+        ),
+      ),
+    );
+  }
 }

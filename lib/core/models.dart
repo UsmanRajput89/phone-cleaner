@@ -42,6 +42,9 @@ class FileEntry {
   final int status;
   final String? origPath;
 
+  /// 0 = not a duplicate, 1 = the copy to keep, 2 = an extra copy.
+  final int dup;
+
   const FileEntry({
     required this.path,
     required this.size,
@@ -51,6 +54,7 @@ class FileEntry {
     required this.ext,
     this.status = Status.pending,
     this.origPath,
+    this.dup = 0,
   });
 
   String get name => p.basename(path);
@@ -65,10 +69,11 @@ class FileEntry {
       ext: r['ext'] as String,
       status: (r['status'] as num).toInt(),
       origPath: r['orig_path'] as String?,
+      dup: ((r['dup'] as num?) ?? 0).toInt(),
     );
   }
 
-  FileEntry copyWith({String? path, int? status, String? origPath}) {
+  FileEntry copyWith({String? path, int? status, String? origPath, int? dup}) {
     return FileEntry(
       path: path ?? this.path,
       size: size,
@@ -78,6 +83,7 @@ class FileEntry {
       ext: ext,
       status: status ?? this.status,
       origPath: origPath ?? this.origPath,
+      dup: dup ?? this.dup,
     );
   }
 }
@@ -185,4 +191,30 @@ class Counts {
   int get kept => _sum((b) => b.kept);
   int get trash => _sum((b) => b.trash);
   int get reviewed => kept + trash;
+}
+
+/// One set of byte-identical files.
+class DupGroup {
+  final String hash;
+  final int size;
+  final List<FileEntry> members; // keeper first
+
+  const DupGroup(this.hash, this.size, this.members);
+
+  FileEntry get keeper =>
+      members.firstWhere((e) => e.dup == 1, orElse: () => members.first);
+
+  List<FileEntry> get extras =>
+      members.where((e) => !identical(e, keeper)).toList();
+
+  int get extraBytes => size * (members.length - 1);
+}
+
+class DupStats {
+  final int groups;
+  final int extras;
+  final int bytes;
+
+  const DupStats(this.groups, this.extras, this.bytes);
+  static const DupStats none = DupStats(0, 0, 0);
 }

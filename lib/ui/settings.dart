@@ -28,7 +28,7 @@ class _SettingsBody extends StatelessWidget {
     final p = context.soft;
     final c = AppScope.of(context);
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -74,6 +74,24 @@ class _SettingsBody extends StatelessWidget {
                     onTap: () => c.setIncludeWhatsApp(true)),
               ],
             ),
+            const SizedBox(height: 20),
+            Text('Duplicate copies in review',
+                style: ts(context, 13, color: p.muted)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SoftChip(
+                    label: 'Hide extras',
+                    selected: c.hideDupes,
+                    onTap: () => c.setHideDupes(true)),
+                SoftChip(
+                    label: 'Show all',
+                    selected: !c.hideDupes,
+                    onTap: () => c.setHideDupes(false)),
+              ],
+            ),
             const SizedBox(height: 24),
             SoftPill(
               label: c.scanning ? 'Scanning...' : 'Rescan files',
@@ -96,8 +114,8 @@ class _SettingsBody extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'This app only moves files into the ToDelete folder. It never '
-              'deletes anything. Delete from the Gallery or the Files app.',
+              'Files only move into the ToDelete folder. Nothing is deleted '
+              'unless you permanently delete it from ToDelete yourself.',
               style: ts(context, 12, color: p.muted, height: 1.5),
             ),
             const SizedBox(height: 10),
