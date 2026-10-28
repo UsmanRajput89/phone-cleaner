@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as pth;
 
@@ -6,6 +8,7 @@ import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/classify.dart';
 import '../core/models.dart';
+import '../native.dart';
 import 'soft.dart';
 
 /// List mode: documents, PDFs, APKs, zips and everything that is not a photo
@@ -27,6 +30,7 @@ class _FilesPageState extends State<FilesPage> {
   final ScrollController _scroll = ScrollController();
 
   String _filter = 'all';
+  String _sort = 'largest';
   bool _loading = false;
   bool _more = true;
   bool _working = false;
@@ -55,7 +59,7 @@ class _FilesPageState extends State<FilesPage> {
     List<String>? notExts;
     if (_filter == 'other') {
       notExts = extGroups.values.expand((e) => e).toList();
-    } else if (_filter != 'all') {
+    } else if (_filter != 'all' && _filter != 'dups') {
       exts = extGroups[_filter];
     }
     return FileQuery(
@@ -65,7 +69,8 @@ class _FilesPageState extends State<FilesPage> {
           .toList(),
       exts: exts,
       notExts: notExts,
-      sort: SortMode.largest,
+      sort: _sort == 'oldest' ? SortMode.oldest : SortMode.largest,
+      duplicatesOnly: _filter == 'dups',
       limit: pageSize,
     );
   }
@@ -102,6 +107,19 @@ class _FilesPageState extends State<FilesPage> {
 
   void _selectAll() {
     setState(() => _selected.addAll(_items.map((e) => e.path)));
+    widget.onSelectionChanged(_selected.isNotEmpty);
+  }
+
+  /// In Duplicates view: selects every copy except the first of each group, so
+  /// one copy always stays.
+  void _selectExtras() {
+    final seen = <String>{};
+    setState(() {
+      for (final e in _items) {
+        final key = '${e.size}|${e.name}';
+        if (!seen.add(key)) _selected.add(e.path);
+      }
+    });
     widget.onSelectionChanged(_selected.isNotEmpty);
   }
 
@@ -192,12 +210,13 @@ class _FilesPageState extends State<FilesPage> {
                       ),
                     ),
                     SoftTap(
-                      label: 'Select all',
-                      onTap: _selectAll,
+                      label: _filter == 'dups' ? 'Select extras' : 'Select all',
+                      onTap: _filter == 'dups' ? _selectExtras : _selectAll,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 12),
-                        child: Text('Select all',
+                        child: Text(
+                            _filter == 'dups' ? 'Select extras' : 'Select all',
                             style: ts(context, 14,
                                 weight: FontWeight.w500, color: p.accent)),
                       ),
@@ -219,6 +238,7 @@ class _FilesPageState extends State<FilesPage> {
                       ['pdf', 'PDF'],
                       ['docs', 'Docs'],
                       ['other', 'Other'],
+                      ['dups', 'Duplicates'],
                     ]) ...[
                       SoftChip(
                         label: f[1],
@@ -236,14 +256,34 @@ class _FilesPageState extends State<FilesPage> {
               ),
               const SizedBox(height: 8),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('LARGEST FIRST',
-                      style: ts(context, 12, color: p.muted, letterSpacing: 1)),
-                  Text('${formatInt(_totalCount)} files',
+                  for (final f in const [
+                    ['largest', 'Largest first'],
+                    ['oldest', 'Oldest first'],
+                  ]) ...[
+                    SoftChip(
+                      label: f[1],
+                      selected: _sort == f[0],
+                      onTap: () {
+                        if (_sort == f[0]) return;
+                        setState(() => _sort = f[0]);
+                        _load(reset: true);
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  const Spacer(),
+                  Text('${formatInt(_totalCount)}',
                       style: ts(context, 12, color: p.muted)),
                 ],
               ),
+              if (_filter == 'dups') ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Same name and size. "Select extras" keeps one copy of each.',
+                  style: ts(context, 12, color: p.muted),
+                ),
+              ],
               const SizedBox(height: 8),
               Expanded(child: _list(context, selecting)),
             ],
@@ -337,18 +377,81 @@ class _FileRow extends StatelessWidget {
     required this.onTap,
   });
 
+  Widget _leading(BuildContext context) {
+    final p = context.soft;
+    final label = Text(extLabel(entry.ext),
+        style: ts(context, 11, weight: FontWeight.w500, color: p.muted));
+    if (entry.ext != 'pdf') {
+      return Container(
+        width: 44,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: raisedDeco(p, radius: 12),
+        child: label,
+      );
+    }
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
+      decoration: raisedDeco(p, radius: 12),
+      child: FutureBuilder<Uint8List?>(
+        future: FileInfoCache.pdf(entry.path),
+        builder: (context, snap) {
+          final b = snap.data;
+          if (b == null) return label;
+          return Image.memory(b,
+              width: 44, height: 44, fit: BoxFit.cover, alignment: Alignment.topCenter);
+        },
+      ),
+    );
+  }
+
+  Widget _subtitle(BuildContext context) {
+    final p = context.soft;
+    final dir = pth.dirname(entry.path).replaceFirst('/storage/emulated/0/', '');
+    final base = '${formatBytes(entry.size)} · ${formatDate(entry.mtime)}';
+    Widget line(String t) => Text(t,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ts(context, 12, color: p.muted));
+    final path = Text(dir,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ts(context, 11, color: p.muted));
+    if (entry.ext != 'apk') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [line(base), path],
+      );
+    }
+    return FutureBuilder<Map<String, String>?>(
+      future: FileInfoCache.apk(entry.path),
+      builder: (context, snap) {
+        final info = snap.data;
+        final app = info == null
+            ? ''
+            : '${info['label']} ${info['version']} · ';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [line('$app$base'), path],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.soft;
-    final folder = pth.basename(pth.dirname(entry.path));
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: SoftTap(
         onTap: onTap,
         label: '${selected ? 'Deselect' : 'Select'} ${entry.name}',
         child: Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: 78,
+          padding: const EdgeInsets.only(left: 14, right: 8),
           decoration:
               selected ? pressedDeco(p, radius: 20) : raisedDeco(p, radius: 20),
           child: Row(
@@ -366,17 +469,9 @@ class _FileRow extends StatelessWidget {
                     ? Icon(Icons.check_rounded, size: 16, color: p.bg)
                     : null,
               ),
-              const SizedBox(width: 14),
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: raisedDeco(p, radius: 12),
-                child: Text(extLabel(entry.ext),
-                    style: ts(context, 11,
-                        weight: FontWeight.w500, color: p.muted)),
-              ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
+              _leading(context),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -387,14 +482,22 @@ class _FileRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: ts(context, 15)),
                     const SizedBox(height: 2),
-                    Text(
-                      '${formatBytes(entry.size)} · ${formatDate(entry.mtime)} · $folder',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ts(context, 12, color: p.muted),
-                    ),
+                    _subtitle(context),
                   ],
                 ),
+              ),
+              SoftIconButton(
+                icon: Icons.open_in_new_rounded,
+                label: 'Open ${entry.name}',
+                size: 40,
+                iconSize: 18,
+                color: p.accent,
+                onTap: () async {
+                  final ok = await Native.openFile(entry.path);
+                  if (!ok && context.mounted) {
+                    showSoftSnack(context, 'No app found to open this file');
+                  }
+                },
               ),
             ],
           ),

@@ -18,7 +18,26 @@ if 'MANAGE_EXTERNAL_STORAGE' not in s:
 s = re.sub(r'android:label="[^"]*"', 'android:label="Phone Cleaner"', s, count=1)
 if 'requestLegacyExternalStorage' not in s:
     s = s.replace('<application', '<application android:requestLegacyExternalStorage="true"', 1)
+if 'FileProvider' not in s:
+    provider = (
+        '        <provider android:name="androidx.core.content.FileProvider" '
+        'android:authorities="${applicationId}.fileprovider" '
+        'android:exported="false" android:grantUriPermissions="true">\n'
+        '            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" '
+        'android:resource="@xml/file_paths"/>\n'
+        '        </provider>\n'
+    )
+    s = s.replace('</application>', provider + '    </application>', 1)
 open(manifest, 'w').write(s)
+
+import os
+os.makedirs('android/app/src/main/res/xml', exist_ok=True)
+open('android/app/src/main/res/xml/file_paths.xml', 'w').write(
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<paths>\n'
+    '    <external-path name="all" path="."/>\n'
+    '</paths>\n'
+)
 
 candidates = [c for c in glob.glob('android/app/src/main/**/MainActivity.*', recursive=True)
               if c.endswith('.kt')]

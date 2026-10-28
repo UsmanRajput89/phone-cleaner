@@ -6,6 +6,6 @@ Personal Android app to triage files into a `ToDelete` folder. It never deletes 
 - List mode for documents, PDFs, APKs and zips.
 - WhatsApp media is off by default (Settings).
 
-Install: open the Releases page on your phone, download `PhoneCleaner.apk`, allow "Install unknown apps", then grant "All files access" on first launch.
+Install: open the Releases page on your phone, download `PhoneCleaner-vX.Y.Z.apk`, allow "Install unknown apps", then grant "All files access" on first launch.
 
 Built by GitHub Actions on every push to `main`.

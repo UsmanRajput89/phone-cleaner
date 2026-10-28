@@ -93,6 +93,9 @@ class FileQuery {
   final int limit;
   final int offset;
   final List<String> excludePaths;
+  final String? pathPrefix;
+  final String? month; // 'YYYY-MM'
+  final bool duplicatesOnly;
 
   const FileQuery({
     this.status = Status.pending,
@@ -110,6 +113,9 @@ class FileQuery {
     this.limit = 50,
     this.offset = 0,
     this.excludePaths = const [],
+    this.pathPrefix,
+    this.month,
+    this.duplicatesOnly = false,
   });
 
   FileQuery copyWith({
@@ -122,6 +128,9 @@ class FileQuery {
     int? limit,
     int? offset,
     List<String>? excludePaths,
+    String? pathPrefix,
+    String? month,
+    bool? duplicatesOnly,
   }) {
     return FileQuery(
       status: status ?? this.status,
@@ -133,6 +142,9 @@ class FileQuery {
       limit: limit ?? this.limit,
       offset: offset ?? this.offset,
       excludePaths: excludePaths ?? this.excludePaths,
+      pathPrefix: pathPrefix ?? this.pathPrefix,
+      month: month ?? this.month,
+      duplicatesOnly: duplicatesOnly ?? this.duplicatesOnly,
     );
   }
 }

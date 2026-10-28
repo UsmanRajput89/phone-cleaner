@@ -5,6 +5,9 @@ import '../app/theme.dart';
 import 'report.dart';
 import 'soft.dart';
 
+const String appVersion =
+    String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
+
 Future<void> showSettingsSheet(BuildContext context) {
   final p = context.soft;
   return showModalBottomSheet<void>(
@@ -97,6 +100,8 @@ class _SettingsBody extends StatelessWidget {
               'deletes anything. Delete from the Gallery or the Files app.',
               style: ts(context, 12, color: p.muted, height: 1.5),
             ),
+            const SizedBox(height: 10),
+            Text('Version $appVersion', style: ts(context, 12, color: p.muted)),
           ],
         ),
       ),

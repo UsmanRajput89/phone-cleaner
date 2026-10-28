@@ -9,6 +9,9 @@ class _Where {
   _Where(this.sql, this.args);
 }
 
+const String _baseName =
+    "REPLACE(path, RTRIM(path, REPLACE(path, '/', '')), '')";
+
 String _ph(int n) => List.filled(n, '?').join(',');
 
 String _order(SortMode s) {
@@ -106,7 +109,40 @@ class Store {
       parts.add('path NOT IN (${_ph(q.excludePaths.length)})');
       args.addAll(q.excludePaths);
     }
+    final prefix = q.pathPrefix;
+    if (prefix != null) {
+      final esc = prefix
+          .replaceAll('\\', '\\\\')
+          .replaceAll('%', '\\%')
+          .replaceAll('_', '\\_');
+      parts.add("path LIKE ? ESCAPE '\\'");
+      args.add('$esc/%');
+    }
+    final month = q.month;
+    if (month != null) {
+      parts.add("strftime('%Y-%m', mtime / 1000, 'unixepoch', 'localtime') = ?");
+      args.add(month);
+    }
+    if (q.duplicatesOnly) {
+      parts.add('(size, $_baseName) IN (SELECT size, $_baseName FROM files '
+          "WHERE status = 0 AND kind = 'other' GROUP BY 1, 2 HAVING COUNT(*) > 1)");
+    }
     return _Where(parts.join(' AND '), args);
+  }
+
+  /// Months (newest first) with counts and sizes under a folder prefix.
+  Future<List<Map<String, Object?>>> monthsUnder(String prefix, String bucket,
+      {int status = 0}) async {
+    final esc = prefix
+        .replaceAll('\\', '\\\\')
+        .replaceAll('%', '\\%')
+        .replaceAll('_', '\\_');
+    return db.rawQuery(
+        "SELECT strftime('%Y-%m', mtime / 1000, 'unixepoch', 'localtime') AS m, "
+        'COUNT(*) AS c, COALESCE(SUM(size), 0) AS s FROM files '
+        "WHERE status = ? AND bucket = ? AND path LIKE ? ESCAPE '\\' "
+        'GROUP BY m ORDER BY m DESC',
+        [status, bucket, '$esc/%']);
   }
 
   Future<List<FileEntry>> query(FileQuery q) async {
@@ -199,7 +235,7 @@ class Store {
           }
         }
         if (cut < 0 || cut > segs.length) cut = segs.length;
-        final key = segs.sublist(0, cut).join('/');
+        final key = p.joinAll(segs.sublist(0, cut));
         final e = out.putIfAbsent(key, () => [0, 0]);
         e[0] += 1;
         e[1] += (r['size'] as num).toInt();

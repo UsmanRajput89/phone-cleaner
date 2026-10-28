@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../app/theme.dart';
+import 'browse.dart';
 import 'files.dart';
 import 'home.dart';
 import 'soft.dart';
@@ -16,7 +17,7 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  // 0 Home, 1 Files, 2 ToDelete. Swipe is a full-screen flow, not a tab.
+  // 0 Home, 1 Files, 2 ToDelete, 3 Browse. Swipe is a full-screen flow, not a tab.
   int _tab = 0;
   bool _selecting = false;
 
@@ -40,6 +41,9 @@ class _ShellState extends State<Shell> {
       case 2:
         body = const ToDeletePage(key: ValueKey('todelete'));
         break;
+      case 3:
+        body = const BrowsePage(key: ValueKey('browse'));
+        break;
       default:
         body = HomePage(key: const ValueKey('home'), onOpenSwipe: _openSwipe);
     }
@@ -61,6 +65,10 @@ class _ShellState extends State<Shell> {
                 }),
                 onSwipe: _openSwipe,
                 onFiles: () => setState(() => _tab = 1),
+                onBrowse: () => setState(() {
+                  _tab = 3;
+                  _selecting = false;
+                }),
                 onToDelete: () => setState(() {
                   _tab = 2;
                   _selecting = false;
@@ -78,6 +86,7 @@ class _NavBar extends StatelessWidget {
   final VoidCallback onHome;
   final VoidCallback onSwipe;
   final VoidCallback onFiles;
+  final VoidCallback onBrowse;
   final VoidCallback onToDelete;
 
   const _NavBar({
@@ -85,6 +94,7 @@ class _NavBar extends StatelessWidget {
     required this.onHome,
     required this.onSwipe,
     required this.onFiles,
+    required this.onBrowse,
     required this.onToDelete,
   });
 
@@ -93,7 +103,7 @@ class _NavBar extends StatelessWidget {
     final p = context.soft;
     return Container(
       height: 68,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: raisedDeco(p, radius: 34),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -113,6 +123,11 @@ class _NavBar extends StatelessWidget {
               label: 'Files',
               active: selected == 1,
               onTap: onFiles),
+          _NavItem(
+              icon: Icons.photo_library_outlined,
+              label: 'Browse',
+              active: selected == 3,
+              onTap: onBrowse),
           _NavItem(
               icon: Icons.folder_outlined,
               label: 'ToDelete',
@@ -145,7 +160,7 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       label: label,
       child: Container(
-        width: 72,
+        width: 60,
         height: 52,
         decoration: active ? pressedDeco(p, radius: 26) : null,
         child: Column(
@@ -154,7 +169,7 @@ class _NavItem extends StatelessWidget {
             Icon(icon, size: 22, color: color),
             const SizedBox(height: 2),
             Text(label,
-                style: ts(context, 11, weight: FontWeight.w500, color: color)),
+                style: ts(context, 10, weight: FontWeight.w500, color: color)),
           ],
         ),
       ),

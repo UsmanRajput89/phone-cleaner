@@ -27,6 +27,32 @@ class Native {
     } catch (_) {}
   }
 
+  static Future<Uint8List?> pdfThumb(String path, {int size = 160}) async {
+    try {
+      return await _ch
+          .invokeMethod<Uint8List>('pdfThumb', {'path': path, 'size': size});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Map<String, String>?> apkInfo(String path) async {
+    try {
+      final r = await _ch.invokeMethod<Map<Object?, Object?>>('apkInfo', {'path': path});
+      return r?.map((k, v) => MapEntry(k as String, v as String));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> openFile(String path) async {
+    try {
+      return (await _ch.invokeMethod<bool>('openFile', {'path': path})) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<Uint8List?> thumbnail(String path, {int size = 400}) async {
     try {
       return await _ch
@@ -71,6 +97,36 @@ class ThumbCache {
     final f = Native.thumbnail(path);
     _m[path] = f;
     if (_m.length > 80) _m.remove(_m.keys.first);
+    return f;
+  }
+}
+
+/// LRU of PDF first-page thumbnails and APK info (futures, reused on rebuild).
+class FileInfoCache {
+  static final Map<String, Future<Uint8List?>> _pdf = {};
+  static final Map<String, Future<Map<String, String>?>> _apk = {};
+
+  static Future<Uint8List?> pdf(String path) {
+    final existing = _pdf.remove(path);
+    if (existing != null) {
+      _pdf[path] = existing;
+      return existing;
+    }
+    final f = Native.pdfThumb(path);
+    _pdf[path] = f;
+    if (_pdf.length > 60) _pdf.remove(_pdf.keys.first);
+    return f;
+  }
+
+  static Future<Map<String, String>?> apk(String path) {
+    final existing = _apk.remove(path);
+    if (existing != null) {
+      _apk[path] = existing;
+      return existing;
+    }
+    final f = Native.apkInfo(path);
+    _apk[path] = f;
+    if (_apk.length > 60) _apk.remove(_apk.keys.first);
     return f;
   }
 }

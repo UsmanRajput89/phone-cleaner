@@ -55,16 +55,16 @@ jobs:
         run: flutter test 2>&1 | tee -a build.log
 
       - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} 2>&1 | tee -a build.log
+        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=APP_VERSION=v1.0.${{ github.run_number }} 2>&1 | tee -a build.log
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk PhoneCleaner.apk
-          gh release create "v1.0.${{ github.run_number }}" PhoneCleaner.apk \
+          cp build/app/outputs/flutter-apk/app-release.apk "PhoneCleaner-v1.0.${{ github.run_number }}.apk"
+          gh release create "v1.0.${{ github.run_number }}" "PhoneCleaner-v1.0.${{ github.run_number }}.apk" \
             --title "Phone Cleaner v1.0.${{ github.run_number }}" \
-            --notes "Download PhoneCleaner.apk on your phone and install it." 2>&1 | tee -a build.log
+            --notes "Download PhoneCleaner-v1.0.${{ github.run_number }}.apk on your phone and install it over the old version." 2>&1 | tee -a build.log
 
       - name: Push logs
         if: always()
