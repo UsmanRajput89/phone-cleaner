@@ -148,13 +148,28 @@ class Counts {
   final Map<Bucket, BucketCount> byBucket;
   final int trashBytes;
 
-  const Counts(this.byBucket, this.trashBytes);
+  /// When WhatsApp review is off, its unreviewed files don't count in the totals.
+  final bool whatsappOff;
+
+  const Counts(this.byBucket, this.trashBytes, {this.whatsappOff = false});
 
   int _sum(int Function(BucketCount) f) =>
       byBucket.values.fold<int>(0, (a, b) => a + f(b));
 
-  int get total => _sum((b) => b.total);
-  int get pending => _sum((b) => b.pending);
+  int _sumTotals(bool pending) {
+    var n = 0;
+    byBucket.forEach((k, b) {
+      if (k == Bucket.whatsapp && whatsappOff) {
+        n += pending ? 0 : b.kept + b.trash;
+      } else {
+        n += pending ? b.pending : b.total;
+      }
+    });
+    return n;
+  }
+
+  int get total => _sumTotals(false);
+  int get pending => _sumTotals(true);
   int get kept => _sum((b) => b.kept);
   int get trash => _sum((b) => b.trash);
   int get reviewed => kept + trash;

@@ -47,7 +47,7 @@ class _GateState extends State<Gate> with WidgetsBindingObserver {
     });
     if (ok) {
       await c.refreshCounts();
-      if ((c.counts?.total ?? 0) == 0) {
+      if (!(await c.store.hasAny())) {
         await c.rescan();
       }
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../app/theme.dart';
+import 'report.dart';
 import 'soft.dart';
 
 Future<void> showSettingsSheet(BuildContext context) {
@@ -80,6 +81,15 @@ class _SettingsBody extends StatelessWidget {
                       Navigator.of(context).pop();
                       await c.rescan();
                     },
+            ),
+            const SizedBox(height: 12),
+            SoftPill(
+              label: 'Scan report',
+              icon: Icons.list_alt_rounded,
+              onTap: () {
+                Navigator.of(context).pop();
+                showScanReport(context);
+              },
             ),
             const SizedBox(height: 16),
             Text(

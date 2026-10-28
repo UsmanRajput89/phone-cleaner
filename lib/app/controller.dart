@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:path/path.dart' as p;
+
+import '../core/classify.dart';
 import '../core/models.dart';
 import '../core/mover.dart';
 import '../core/scanner.dart';
@@ -52,18 +57,98 @@ class AppController extends ChangeNotifier {
 
   Future<void> setIncludeWhatsApp(bool value) async {
     includeWhatsApp = value;
-    notifyListeners();
     await store.setSetting('whatsapp', value ? '1' : '0');
+    await refreshCounts();
   }
 
   Future<void> refreshCounts() async {
-    counts = await store.counts();
+    counts = await store.counts(whatsappOff: !includeWhatsApp);
     notifyListeners();
   }
 
   void refreshCountsSoon() {
     _countsTimer?.cancel();
     _countsTimer = Timer(const Duration(milliseconds: 500), refreshCounts);
+    _backupTimer?.cancel();
+    _backupTimer = Timer(const Duration(seconds: 8), backupState);
+  }
+
+  static const String backupFile = '/storage/emulated/0/.phone_cleaner_state.json';
+  Timer? _backupTimer;
+
+  /// Saves kept / ToDelete decisions to a hidden file in shared storage, so a
+  /// reinstall of the app does not lose your review progress.
+  Future<void> backupState() async {
+    try {
+      final rows = await store.stateRows();
+      final kept = <String>[];
+      final trash = <List<String>>[];
+      for (final r in rows) {
+        final path = r['path'] as String;
+        if ((r['status'] as num).toInt() == Status.kept) {
+          kept.add(path);
+        } else {
+          trash.add([path, (r['orig_path'] as String?) ?? '']);
+        }
+      }
+      final tmp = File('$backupFile.tmp');
+      await tmp.writeAsString(jsonEncode({'v': 1, 'kept': kept, 'trash': trash}));
+      await tmp.rename(backupFile);
+    } catch (_) {}
+  }
+
+  /// After a fresh scan on a reinstall: re-applies saved decisions.
+  Future<int> restoreState() async {
+    try {
+      final f = File(backupFile);
+      if (!await f.exists()) return 0;
+      final data = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      final kept = (data['kept'] as List).cast<String>();
+      final trash = (data['trash'] as List)
+          .map((e) => (e as List).cast<String>())
+          .toList();
+      var n = 0;
+      for (var i = 0; i < kept.length; i += 500) {
+        final end = i + 500 > kept.length ? kept.length : i + 500;
+        final b = store.db.batch();
+        for (final path in kept.sublist(i, end)) {
+          b.update('files', {'status': Status.kept},
+              where: 'path = ? AND status = 0', whereArgs: [path]);
+        }
+        n += end - i;
+        await b.commit(noResult: true);
+      }
+      final found = <ScannedFile>[];
+      final origs = <String, String>{};
+      for (final t in trash) {
+        final path = t[0];
+        final orig = t.length > 1 ? t[1] : '';
+        final file = File(path);
+        if (!await file.exists()) continue;
+        final st = await file.stat();
+        final ext = extOf(p.basename(path));
+        final rel = orig.isNotEmpty ? p.relative(orig, from: rootPath) : p.basename(path);
+        found.add(ScannedFile(
+          path: path,
+          size: st.size,
+          mtime: st.modified.millisecondsSinceEpoch,
+          bucket: bucketForRelPath(rel),
+          kind: kindForExt(ext),
+          ext: ext,
+        ));
+        origs[path] = orig;
+      }
+      await store.insertScanned(found);
+      for (final f2 in found) {
+        final o = origs[f2.path]!;
+        await store.db.update(
+            'files', {'status': Status.todelete, 'orig_path': o.isEmpty ? null : o},
+            where: 'path = ?', whereArgs: [f2.path]);
+      }
+      return n + found.length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<void> rescan() async {
@@ -72,7 +157,9 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       final found = await scanInBackground(const ScanConfig(root: rootPath));
+      final fresh = !(await store.hasAny());
       await store.insertScanned(found);
+      if (fresh) await restoreState();
     } finally {
       scanning = false;
     }

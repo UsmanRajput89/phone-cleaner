@@ -174,11 +174,55 @@ class Store {
     );
   }
 
+  /// Folder / extension breakdown of one bucket, for the scan report.
+  Future<Map<String, List<int>>> folderStats(String bucket, int status) async {
+    final out = <String, List<int>>{};
+    var offset = 0;
+    const page = 5000;
+    while (true) {
+      final rows = await db.rawQuery(
+          'SELECT path, size FROM files WHERE bucket = ? AND status = ? '
+          'LIMIT $page OFFSET $offset',
+          [bucket, status]);
+      for (final r in rows) {
+        final path = r['path'] as String;
+        final segs = p.split(path);
+        segs.removeLast();
+        var cut = -1;
+        var seenWa = false;
+        for (var i = 0; i < segs.length; i++) {
+          final l = segs[i].toLowerCase();
+          if (l.contains('whatsapp')) seenWa = true;
+          if (seenWa && l == 'media' && i + 1 < segs.length) {
+            cut = i + 2;
+            break;
+          }
+        }
+        if (cut < 0 || cut > segs.length) cut = segs.length;
+        final key = segs.sublist(0, cut).join('/');
+        final e = out.putIfAbsent(key, () => [0, 0]);
+        e[0] += 1;
+        e[1] += (r['size'] as num).toInt();
+      }
+      if (rows.length < page) break;
+      offset += page;
+    }
+    return out;
+  }
+
+  Future<List<Map<String, Object?>>> stateRows() => db.query('files',
+      columns: ['path', 'status', 'orig_path'], where: 'status IN (1, 2)');
+
+  Future<bool> hasAny() async {
+    final r = await db.rawQuery('SELECT 1 FROM files LIMIT 1');
+    return r.isNotEmpty;
+  }
+
   Future<void> remove(String path) async {
     await db.delete('files', where: 'path = ?', whereArgs: [path]);
   }
 
-  Future<Counts> counts() async {
+  Future<Counts> counts({bool whatsappOff = false}) async {
     final rows = await db.rawQuery(
         'SELECT bucket, status, COUNT(*) AS c, COALESCE(SUM(size), 0) AS s '
         'FROM files GROUP BY bucket, status');
@@ -200,7 +244,7 @@ class Store {
         trashBytes += s;
       }
     }
-    return Counts(map, trashBytes);
+    return Counts(map, trashBytes, whatsappOff: whatsappOff);
   }
 
   Future<String?> getSetting(String key) async {
