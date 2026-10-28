@@ -92,6 +92,8 @@ void main() {
       await store.assignDupRoles();
     });
 
+    tearDown(() => store.close());
+
     test('candidates are same-size files without a hash', () async {
       final c = await store.dupCandidates();
       expect(c, isEmpty);
