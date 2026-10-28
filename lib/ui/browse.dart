@@ -10,6 +10,7 @@ import '../native.dart';
 import 'folders.dart';
 import 'media.dart';
 import 'soft.dart';
+import 'swipe.dart';
 
 const List<String> _monthNames = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -341,6 +342,23 @@ class _FolderPageState extends State<_FolderPage> {
     });
   }
 
+  /// Opens the swipe reviewer on exactly these files, then refreshes.
+  Future<void> _review(List<FileEntry> list, String title) async {
+    final media =
+        list.where((e) => e.kind == Kind.image || e.kind == Kind.video).toList();
+    if (media.isEmpty) {
+      showSoftSnack(context, 'No photos or videos to swipe here');
+      return;
+    }
+    final c = AppScope.read(context);
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SwipePage(entries: media, title: title)));
+    c.refreshCountsSoon();
+    if (mounted) await _load();
+  }
+
+  List<FileEntry> get _inOrder => [for (final g in _groups) ...g.items];
+
   bool _dayAllSelected(_Group g) =>
       g.items.isNotEmpty && g.items.every((e) => _selected.contains(e.path));
 
@@ -533,6 +551,22 @@ class _FolderPageState extends State<_FolderPage> {
                         ),
                         const SizedBox(width: 10),
                       ],
+                      const Spacer(),
+                      SoftTap(
+                        label: 'Review whole folder one by one',
+                        onTap: _working || _all.isEmpty
+                            ? null
+                            : () => _review(_inOrder, _shortPath(widget.prefix)),
+                        child: Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.center,
+                          decoration: raisedDeco(p, radius: 18),
+                          child: Text('Review folder',
+                              style: ts(context, 13,
+                                  weight: FontWeight.w500, color: p.accent)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -578,11 +612,21 @@ class _FolderPageState extends State<_FolderPage> {
                 onTap: () => _apply(mode: 'keep'),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: SoftPill(
-                label: 'To folder',
-                icon: Icons.folder_special_outlined,
+                label: 'Review',
+                color: p.accent,
+                height: 52,
+                onTap: () => _review(
+                    _inOrder.where((e) => _selected.contains(e.path)).toList(),
+                    '${formatInt(_selected.length)} selected'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SoftPill(
+                label: 'Folder',
                 color: p.accent,
                 height: 52,
                 onTap: () => _apply(mode: 'folder'),
@@ -714,15 +758,29 @@ class _FolderPageState extends State<_FolderPage> {
               ),
             ),
             SoftTap(
+              label: 'Review ${g.label} one by one',
+              onTap: _working ? null : () => _review(g.items, g.label),
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.center,
+                decoration: raisedDeco(p, radius: 15),
+                child: Text('Review',
+                    style: ts(context, 12,
+                        weight: FontWeight.w500, color: p.accent)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SoftTap(
               label: all ? 'Unselect day' : 'Select day',
               onTap: _working ? null : () => _toggleDay(g),
               child: Container(
                 height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 alignment: Alignment.center,
                 decoration:
                     all ? pressedDeco(p, radius: 15) : raisedDeco(p, radius: 15),
-                child: Text(all ? 'Selected' : 'Select day',
+                child: Text(all ? 'Selected' : 'Select',
                     style: ts(context, 12,
                         weight: FontWeight.w500,
                         color: all ? p.keep : p.accent)),

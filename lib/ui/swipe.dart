@@ -24,7 +24,11 @@ class _Act {
 }
 
 class SwipePage extends StatefulWidget {
-  const SwipePage({super.key});
+  /// When set, only these files are reviewed (one day, a selection, a folder).
+  final List<FileEntry>? entries;
+  final String? title;
+
+  const SwipePage({super.key, this.entries, this.title});
 
   @override
   State<SwipePage> createState() => _SwipePageState();
@@ -39,6 +43,9 @@ class _SwipePageState extends State<SwipePage>
   final List<_Act> _history = [];
   final Set<Bucket> _buckets = {};
   SortMode _sort = SortMode.oldest;
+
+  bool get _fixed => widget.entries != null;
+  int _total = 0;
 
   int _batch = 0;
   bool _loading = true;
@@ -72,7 +79,15 @@ class _SwipePageState extends State<SwipePage>
         cb?.call();
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refill());
+    if (_fixed) {
+      _queue.addAll(widget.entries!
+          .where((e) => e.kind == Kind.image || e.kind == Kind.video));
+      _total = _queue.length;
+      _loading = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _precacheNext());
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refill());
+    }
   }
 
   @override
@@ -89,6 +104,7 @@ class _SwipePageState extends State<SwipePage>
   }
 
   Future<void> _refill({bool reset = false}) async {
+    if (_fixed) return;
     final c = AppScope.read(context);
     if (reset) _queue.clear();
     for (var attempt = 0; attempt < 5; attempt++) {
@@ -227,7 +243,7 @@ class _SwipePageState extends State<SwipePage>
       c.refreshCountsSoon();
       if (_queue.length < 12) _refill();
       _precacheNext();
-      if (_batch >= batchSize) _batchDone();
+      if (!_fixed && _batch >= batchSize) _batchDone();
     } catch (_) {
       if (!mounted) return;
       final stillThere = File(entry.path).existsSync();
@@ -399,6 +415,7 @@ class _SwipePageState extends State<SwipePage>
   }
 
   String _subtitle() {
+    if (_fixed) return widget.title ?? '';
     final folders = _buckets.isEmpty
         ? 'All folders'
         : _buckets.map(bucketLabel).join(', ');
@@ -430,7 +447,7 @@ class _SwipePageState extends State<SwipePage>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('$_batch / $batchSize',
+                        Text('$_batch / ${_fixed ? _total : batchSize}',
                             style: ts(context, 18, weight: FontWeight.w500)),
                         Text(_subtitle(),
                             maxLines: 1,
@@ -439,17 +456,23 @@ class _SwipePageState extends State<SwipePage>
                       ],
                     ),
                   ),
-                  SoftIconButton(
-                    icon: Icons.tune_rounded,
-                    label: 'Sort and filter',
-                    color: p.muted,
-                    onTap: _openFilters,
-                  ),
+                  if (_fixed)
+                    const SizedBox(width: 44, height: 44)
+                  else
+                    SoftIconButton(
+                      icon: Icons.tune_rounded,
+                      label: 'Sort and filter',
+                      color: p.muted,
+                      onTap: _openFilters,
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            SoftSlot(value: _batch / batchSize),
+            SoftSlot(
+                value: _fixed
+                    ? (_total == 0 ? 0 : _batch / _total)
+                    : _batch / batchSize),
             const SizedBox(height: 14),
             SoftTap(
               onTap: _busy ? null : _chooseTarget,
@@ -549,16 +572,26 @@ class _SwipePageState extends State<SwipePage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('All caught up', style: ts(context, 22, weight: FontWeight.w300)),
+            Text(_fixed ? 'Done' : 'All caught up',
+                style: ts(context, 22, weight: FontWeight.w300)),
             const SizedBox(height: 8),
-            Text('Nothing left to review in this selection.',
+            Text(
+                _fixed
+                    ? 'You reviewed everything in this set.'
+                    : 'Nothing left to review in this selection.',
                 textAlign: TextAlign.center,
                 style: ts(context, 14, color: p.muted)),
             const SizedBox(height: 20),
-            SoftPill(
-                label: 'Change filters',
-                expand: false,
-                onTap: _openFilters),
+            if (_fixed)
+              SoftPill(
+                  label: 'Back',
+                  expand: false,
+                  onTap: () => Navigator.of(context).pop())
+            else
+              SoftPill(
+                  label: 'Change filters',
+                  expand: false,
+                  onTap: _openFilters),
           ],
         ),
       );
