@@ -16,14 +16,6 @@ const List<String> _monthNames = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-String _monthLabel(String ym) {
-  final parts = ym.split('-');
-  if (parts.length != 2) return ym;
-  final m = int.tryParse(parts[1]) ?? 0;
-  if (m < 1 || m > 12) return ym;
-  return '${_monthNames[m - 1]} ${parts[0]}';
-}
-
 String _shortPath(String path) =>
     path.replaceFirst('/storage/emulated/0/', '').replaceFirst('Android/media/', '');
 
@@ -67,7 +59,7 @@ class _BrowsePageState extends State<BrowsePage> {
 
   Future<void> _open(_FolderRow r) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _MonthsPage(bucket: _bucket, prefix: r.path),
+      builder: (_) => _FolderPage(bucket: _bucket, prefix: r.path),
     ));
     if (mounted) _load();
   }
@@ -169,180 +161,69 @@ class _BrowsePageState extends State<BrowsePage> {
   }
 }
 
-class _MonthsPage extends StatefulWidget {
+const List<String> _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+class _Group {
+  final String key;
+  final String label;
+  final int ym; // year * 100 + month
+  final List<FileEntry> items = [];
+  int bytes = 0;
+
+  _Group(this.key, this.label, this.ym);
+}
+
+class _Flat {
+  final _Group? header;
+  final List<FileEntry>? row;
+
+  _Flat.header(_Group g)
+      : header = g,
+        row = null;
+  _Flat.row(List<FileEntry> r)
+      : header = null,
+        row = r;
+}
+
+/// One folder, every date on one scrolling page, grouped by day.
+class _FolderPage extends StatefulWidget {
   final Bucket bucket;
   final String prefix;
 
-  const _MonthsPage({required this.bucket, required this.prefix});
+  const _FolderPage({required this.bucket, required this.prefix});
 
   @override
-  State<_MonthsPage> createState() => _MonthsPageState();
+  State<_FolderPage> createState() => _FolderPageState();
 }
 
-class _MonthsPageState extends State<_MonthsPage> {
-  List<Map<String, Object?>>? _months;
+class _FolderPageState extends State<_FolderPage> {
+  static const double headerH = 48;
+  static const double gap = 6;
+  static const double railW = 30;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  Future<void> _load() async {
-    final c = AppScope.read(context);
-    final rows = await c.store.monthsUnder(widget.prefix, widget.bucket.name);
-    if (!mounted) return;
-    setState(() => _months = rows);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.soft;
-    final months = _months;
-    return SoftScaffold(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: 64,
-              child: Row(
-                children: [
-                  SoftIconButton(
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    label: 'Back',
-                    iconSize: 18,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(_shortPath(widget.prefix),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: ts(context, 16)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text('MONTHS',
-                style: ts(context, 12, color: p.muted, letterSpacing: 1)),
-            const SizedBox(height: 10),
-            Expanded(
-              child: months == null
-                  ? Center(child: CircularProgressIndicator(color: p.accent))
-                  : months.isEmpty
-                      ? Center(
-                          child: Text('Nothing left here',
-                              style: ts(context, 15, color: p.muted)))
-                      : ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 24),
-                          itemCount: months.length,
-                          itemBuilder: (context, i) {
-                            final m = months[i];
-                            final ym = (m['m'] as String?) ?? '';
-                            final count = (m['c'] as num).toInt();
-                            final bytes = (m['s'] as num).toInt();
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: SoftTap(
-                                onTap: () async {
-                                  await Navigator.of(context)
-                                      .push(MaterialPageRoute<void>(
-                                    builder: (_) => _GridPage(
-                                      bucket: widget.bucket,
-                                      prefix: widget.prefix,
-                                      month: ym,
-                                    ),
-                                  ));
-                                  if (mounted) _load();
-                                },
-                                label: _monthLabel(ym),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 14),
-                                  decoration: raisedDeco(p, radius: 20),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(_monthLabel(ym),
-                                                style: ts(context, 16)),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                                '${formatInt(count)} files · ${formatBytes(bytes)}',
-                                                style: ts(context, 12,
-                                                    color: p.muted)),
-                                          ],
-                                        ),
-                                      ),
-                                      Icon(Icons.chevron_right_rounded,
-                                          color: p.muted),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GridPage extends StatefulWidget {
-  final Bucket bucket;
-  final String prefix;
-  final String month;
-
-  const _GridPage({
-    required this.bucket,
-    required this.prefix,
-    required this.month,
-  });
-
-  @override
-  State<_GridPage> createState() => _GridPageState();
-}
-
-class _GridPageState extends State<_GridPage> {
-  static const int pageSize = 90;
-
-  final List<FileEntry> _items = [];
-  final Map<String, int> _sizes = {};
+  List<FileEntry> _all = [];
+  final Map<String, FileEntry> _byPath = {};
   final Set<String> _selected = {};
   final ScrollController _scroll = ScrollController();
 
-  bool _loading = false;
-  bool _more = true;
+  List<_Group> _groups = [];
+  List<_Flat> _flat = [];
+  List<int> _groupFlatIndex = [];
+  List<double> _offsets = [];
+  double _tile = 0;
+  int _activeYm = 0;
+
+  bool _loaded = false;
+  bool _newestFirst = true;
   bool _working = false;
   int _done = 0;
   int _total = 0;
 
-  FileQuery get _query => FileQuery(
-        buckets: [widget.bucket],
-        pathPrefix: widget.prefix,
-        month: widget.month,
-        sort: SortMode.newest,
-        limit: pageSize,
-      );
-
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 800) {
-        _load();
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load(reset: true));
+    _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
@@ -351,27 +232,107 @@ class _GridPageState extends State<_GridPage> {
     super.dispose();
   }
 
-  Future<void> _load({bool reset = false}) async {
-    if (_loading) return;
-    if (!reset && !_more) return;
-    _loading = true;
+  Future<void> _load() async {
     final c = AppScope.read(context);
-    if (reset) {
-      _items.clear();
-      _more = true;
-    }
-    final rows = await c.store.query(_query.copyWith(offset: _items.length));
-    final total = await c.store.count(_query);
-    _loading = false;
+    final rows = await c.store.query(FileQuery(
+      buckets: [widget.bucket],
+      pathPrefix: widget.prefix,
+      sort: SortMode.newest,
+      limit: 500000,
+    ));
     if (!mounted) return;
-    setState(() {
-      _items.addAll(rows);
-      for (final e in rows) {
-        _sizes[e.path] = e.size;
+    _all = rows;
+    _byPath
+      ..clear()
+      ..addEntries(rows.map((e) => MapEntry(e.path, e)));
+    _selected.removeWhere((p) => !_byPath.containsKey(p));
+    _regroup();
+    setState(() => _loaded = true);
+  }
+
+  String _labelFor(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    final wd = _weekdays[d.weekday - 1];
+    return '$wd, ${formatDate(d.millisecondsSinceEpoch)}';
+  }
+
+  void _regroup() {
+    final list = List<FileEntry>.of(_all);
+    list.sort((a, b) => _newestFirst
+        ? b.mtime.compareTo(a.mtime)
+        : a.mtime.compareTo(b.mtime));
+    final groups = <_Group>[];
+    final index = <String, _Group>{};
+    for (final e in list) {
+      final d = DateTime.fromMillisecondsSinceEpoch(e.mtime);
+      final key = '${d.year}-${d.month}-${d.day}';
+      var g = index[key];
+      if (g == null) {
+        g = _Group(key, _labelFor(d), d.year * 100 + d.month);
+        index[key] = g;
+        groups.add(g);
       }
-      _more = rows.length == pageSize;
-      _total = total;
-    });
+      g.items.add(e);
+      g.bytes += e.size;
+    }
+    final flat = <_Flat>[];
+    final gIdx = <int>[];
+    for (final g in groups) {
+      gIdx.add(flat.length);
+      flat.add(_Flat.header(g));
+      for (var i = 0; i < g.items.length; i += 4) {
+        final end = i + 4 > g.items.length ? g.items.length : i + 4;
+        flat.add(_Flat.row(g.items.sublist(i, end)));
+      }
+    }
+    _groups = groups;
+    _flat = flat;
+    _groupFlatIndex = gIdx;
+    _offsets = [];
+    _tile = 0;
+    _activeYm = groups.isEmpty ? 0 : groups.first.ym;
+  }
+
+  void _computeOffsets(double tile) {
+    if (_tile == tile && _offsets.length == _flat.length) return;
+    _tile = tile;
+    final out = List<double>.filled(_flat.length, 0);
+    var y = 0.0;
+    for (var i = 0; i < _flat.length; i++) {
+      out[i] = y;
+      y += _flat[i].header != null ? headerH : tile + gap;
+    }
+    _offsets = out;
+  }
+
+  void _onScroll() {
+    if (_groups.isEmpty || _offsets.length != _flat.length) return;
+    final y = _scroll.offset + 1;
+    var lo = 0;
+    var hi = _groups.length - 1;
+    while (lo < hi) {
+      final mid = (lo + hi + 1) ~/ 2;
+      if (_offsets[_groupFlatIndex[mid]] <= y) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    final ym = _groups[lo].ym;
+    if (ym != _activeYm) setState(() => _activeYm = ym);
+  }
+
+  void _jumpToMonth(int ym) {
+    final gi = _groups.indexWhere((g) => g.ym == ym);
+    if (gi < 0 || _offsets.length != _flat.length) return;
+    final target = _offsets[_groupFlatIndex[gi]];
+    final max = _scroll.position.maxScrollExtent;
+    _scroll.jumpTo(target > max ? max : target);
   }
 
   void _toggle(FileEntry e) {
@@ -380,25 +341,32 @@ class _GridPageState extends State<_GridPage> {
     });
   }
 
-  Future<void> _selectAll() async {
-    final c = AppScope.read(context);
-    final all = await c.store.query(_query.copyWith(limit: 200000, offset: 0));
-    if (!mounted) return;
+  bool _dayAllSelected(_Group g) =>
+      g.items.isNotEmpty && g.items.every((e) => _selected.contains(e.path));
+
+  void _toggleDay(_Group g) {
     setState(() {
-      for (final e in all) {
-        _selected.add(e.path);
-        _sizes[e.path] = e.size;
+      if (_dayAllSelected(g)) {
+        for (final e in g.items) {
+          _selected.remove(e.path);
+        }
+      } else {
+        for (final e in g.items) {
+          _selected.add(e.path);
+        }
       }
     });
   }
 
   int get _selectedBytes {
     var sum = 0;
-    for (final path in _selected) {
-      sum += _sizes[path] ?? 0;
+    for (final p in _selected) {
+      sum += _byPath[p]?.size ?? 0;
     }
     return sum;
   }
+
+  int get _allBytes => _all.fold<int>(0, (a, e) => a + e.size);
 
   Future<void> _apply({required String mode}) async {
     if (_working || _selected.isEmpty) return;
@@ -409,8 +377,6 @@ class _GridPageState extends State<_GridPage> {
       if (folder == null || !mounted) return;
     }
     final paths = _selected.toList();
-    final entries = await c.store.query(_query.copyWith(limit: 200000, offset: 0));
-    final byPath = {for (final e in entries) e.path: e};
     setState(() {
       _working = true;
       _done = 0;
@@ -419,7 +385,7 @@ class _GridPageState extends State<_GridPage> {
     final handled = <String>{};
     var failed = 0;
     for (final path in paths) {
-      final e = byPath[path];
+      final e = _byPath[path];
       if (e == null) continue;
       try {
         if (mode == 'trash') {
@@ -437,11 +403,13 @@ class _GridPageState extends State<_GridPage> {
       if (mounted && _done % 10 == 0) setState(() {});
     }
     if (!mounted) return;
-    setState(() {
-      _items.removeWhere((e) => handled.contains(e.path));
-      _selected.removeAll(handled);
-      _working = false;
-    });
+    _all = _all.where((e) => !handled.contains(e.path)).toList();
+    for (final p in handled) {
+      _byPath.remove(p);
+    }
+    _selected.removeAll(handled);
+    _regroup();
+    setState(() => _working = false);
     c.refreshCountsSoon();
     final verb = mode == 'keep'
         ? 'Kept'
@@ -452,7 +420,25 @@ class _GridPageState extends State<_GridPage> {
           ? '$verb ${handled.length} files'
           : '$verb ${handled.length} files, $failed failed',
     );
-    _load(reset: true);
+  }
+
+  List<MapEntry<int, String>> _railItems() {
+    // (ym, label); a negative key marks a year label.
+    final out = <MapEntry<int, String>>[];
+    var lastYm = -1;
+    var lastYear = -1;
+    for (final g in _groups) {
+      if (g.ym == lastYm) continue;
+      lastYm = g.ym;
+      final year = g.ym ~/ 100;
+      final month = g.ym % 100;
+      if (year != lastYear) {
+        lastYear = year;
+        out.add(MapEntry(-year, "'${(year % 100).toString().padLeft(2, '0')}"));
+      }
+      out.add(MapEntry(g.ym, _monthNames[month - 1]));
+    }
+    return out;
   }
 
   @override
@@ -463,7 +449,7 @@ class _GridPageState extends State<_GridPage> {
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -472,10 +458,20 @@ class _GridPageState extends State<_GridPage> {
                   child: Row(
                     children: [
                       SoftIconButton(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        label: 'Back',
+                        icon: selecting
+                            ? Icons.close_rounded
+                            : Icons.arrow_back_ios_new_rounded,
+                        label: selecting ? 'Clear selection' : 'Back',
                         iconSize: 18,
-                        onTap: _working ? null : () => Navigator.of(context).pop(),
+                        onTap: _working
+                            ? null
+                            : () {
+                                if (selecting) {
+                                  setState(_selected.clear);
+                                } else {
+                                  Navigator.of(context).pop();
+                                }
+                              },
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -483,19 +479,27 @@ class _GridPageState extends State<_GridPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(_monthLabel(widget.month),
-                                style: ts(context, 18)),
                             Text(
                                 selecting
                                     ? '${formatInt(_selected.length)} selected'
-                                    : '${formatInt(_total)} files',
+                                    : _shortPath(widget.prefix),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ts(context, 17, weight: FontWeight.w500)),
+                            Text(
+                                selecting
+                                    ? '${formatBytes(_selectedBytes)} selected'
+                                    : '${formatInt(_all.length)} files · ${formatBytes(_allBytes)} · all dates',
                                 style: ts(context, 12, color: p.muted)),
                           ],
                         ),
                       ),
                       SoftTap(
                         label: 'Select all',
-                        onTap: _working ? null : _selectAll,
+                        onTap: _working
+                            ? null
+                            : () => setState(
+                                () => _selected.addAll(_all.map((e) => e.path))),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 4, vertical: 12),
@@ -507,75 +511,32 @@ class _GridPageState extends State<_GridPage> {
                     ],
                   ),
                 ),
-                Text('Tap to select · long press to open',
-                    style: ts(context, 12, color: p.muted)),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: GridView.builder(
-                    controller: _scroll,
-                    padding: EdgeInsets.only(bottom: selecting ? 150 : 24),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                    ),
-                    itemCount: _items.length,
-                    itemBuilder: (context, i) {
-                      final e = _items[i];
-                      final sel = _selected.contains(e.path);
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _working ? null : () => _toggle(e),
-                        onLongPress: _working
-                            ? null
-                            : () async {
-                                final ok = await Native.openFile(e.path);
-                                if (!ok && context.mounted) {
-                                  showSoftSnack(
-                                      context, 'No app found to open this file');
-                                }
-                              },
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: MediaThumb(entry: e, cacheWidth: 240),
-                            ),
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: sel ? p.accent : p.ring,
-                                      width: sel ? 3 : 1,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (sel)
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: p.accent,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(Icons.check_rounded,
-                                      size: 16, color: p.bg),
-                                ),
-                              ),
-                          ],
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    children: [
+                      for (final f in const [
+                        [true, 'Newest first'],
+                        [false, 'Oldest first'],
+                      ]) ...[
+                        SoftChip(
+                          label: f[1] as String,
+                          selected: _newestFirst == (f[0] as bool),
+                          onTap: () {
+                            if (_newestFirst == (f[0] as bool)) return;
+                            setState(() {
+                              _newestFirst = f[0] as bool;
+                              _regroup();
+                            });
+                            if (_scroll.hasClients) _scroll.jumpTo(0);
+                          },
                         ),
-                      );
-                    },
+                        const SizedBox(width: 10),
+                      ],
+                    ],
                   ),
                 ),
+                Expanded(child: _content(context, selecting)),
               ],
             ),
           ),
@@ -584,49 +545,242 @@ class _GridPageState extends State<_GridPage> {
               left: 24,
               right: 24,
               bottom: 20,
-              child: _working
-                  ? Container(
-                      height: 56,
-                      alignment: Alignment.center,
-                      decoration: raisedDeco(p, radius: 28),
-                      child: Text('Working... $_done / $_total',
-                          style: ts(context, 15, color: p.muted)),
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
+              child: _working ? _progress(context) : _bar(context),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _progress(BuildContext context) {
+    final p = context.soft;
+    return Container(
+      height: 56,
+      alignment: Alignment.center,
+      decoration: raisedDeco(p, radius: 28),
+      child: Text('Working... $_done / $_total',
+          style: ts(context, 15, color: p.muted)),
+    );
+  }
+
+  Widget _bar(BuildContext context) {
+    final p = context.soft;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SoftPill(
+                label: 'Keep',
+                color: p.keep,
+                height: 52,
+                onTap: () => _apply(mode: 'keep'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SoftPill(
+                label: 'To folder',
+                icon: Icons.folder_special_outlined,
+                color: p.accent,
+                height: 52,
+                onTap: () => _apply(mode: 'folder'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SoftPill(
+          label:
+              'Move ${formatInt(_selected.length)} to ToDelete · ${formatBytes(_selectedBytes)}',
+          color: p.remove,
+          height: 52,
+          onTap: () => _apply(mode: 'trash'),
+        ),
+      ],
+    );
+  }
+
+  Widget _content(BuildContext context, bool selecting) {
+    final p = context.soft;
+    if (!_loaded) {
+      return Center(child: CircularProgressIndicator(color: p.accent));
+    }
+    if (_flat.isEmpty) {
+      return Center(
+          child: Text('Nothing left here',
+              style: ts(context, 15, color: p.muted)));
+    }
+    return LayoutBuilder(builder: (context, box) {
+      final listW = box.maxWidth - railW - 10;
+      final tile = ((listW - gap * 3) / 4).floorToDouble();
+      _computeOffsets(tile);
+      final rail = _railItems();
+      return Stack(
+        children: [
+          Positioned.fill(
+            right: railW + 10,
+            child: ListView.builder(
+              controller: _scroll,
+              padding: EdgeInsets.only(bottom: selecting ? 170 : 40),
+              itemCount: _flat.length,
+              itemBuilder: (context, i) {
+                final f = _flat[i];
+                final g = f.header;
+                if (g != null) return _header(context, g);
+                return SizedBox(
+                  height: tile + gap,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: gap),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SoftPill(
-                                label: 'Keep',
-                                color: p.keep,
-                                height: 52,
-                                onTap: () => _apply(mode: 'keep'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: SoftPill(
-                                label: 'To folder',
-                                icon: Icons.folder_special_outlined,
-                                color: p.accent,
-                                height: 52,
-                                onTap: () => _apply(mode: 'folder'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        SoftPill(
-                          label:
-                              'Move ${formatInt(_selected.length)} to ToDelete · ${formatBytes(_selectedBytes)}',
-                          color: p.remove,
-                          height: 52,
-                          onTap: () => _apply(mode: 'trash'),
-                        ),
+                        for (var k = 0; k < f.row!.length; k++) ...[
+                          if (k > 0) const SizedBox(width: gap),
+                          SizedBox(
+                            width: tile,
+                            height: tile,
+                            child: _tileFor(context, f.row![k]),
+                          ),
+                        ],
                       ],
                     ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            right: 0,
+            top: 4,
+            bottom: selecting ? 170 : 24,
+            width: railW,
+            child: Container(
+              decoration: raisedDeco(p, radius: 15),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  for (final r in rail)
+                    SoftTap(
+                      label: r.key < 0 ? 'Year ${r.value}' : 'Jump to ${r.value}',
+                      onTap: r.key < 0 ? null : () => _jumpToMonth(r.key),
+                      child: SizedBox(
+                        height: 28,
+                        child: Center(
+                          child: Text(
+                            r.value,
+                            style: ts(
+                              context,
+                              10,
+                              weight: FontWeight.w500,
+                              color: r.key == _activeYm
+                                  ? p.accent
+                                  : (r.key < 0 ? p.text : p.muted),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _header(BuildContext context, _Group g) {
+    final p = context.soft;
+    final all = _dayAllSelected(g);
+    return SizedBox(
+      height: headerH,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(g.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ts(context, 14, weight: FontWeight.w500)),
+                  Text('${formatInt(g.items.length)} files · ${formatBytes(g.bytes)}',
+                      style: ts(context, 11, color: p.muted)),
+                ],
+              ),
+            ),
+            SoftTap(
+              label: all ? 'Unselect day' : 'Select day',
+              onTap: _working ? null : () => _toggleDay(g),
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                alignment: Alignment.center,
+                decoration:
+                    all ? pressedDeco(p, radius: 15) : raisedDeco(p, radius: 15),
+                child: Text(all ? 'Selected' : 'Select day',
+                    style: ts(context, 12,
+                        weight: FontWeight.w500,
+                        color: all ? p.keep : p.accent)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tileFor(BuildContext context, FileEntry e) {
+    final p = context.soft;
+    final sel = _selected.contains(e.path);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _working ? null : () => _toggle(e),
+      onLongPress: _working
+          ? null
+          : () async {
+              final ok = await Native.openFile(e.path);
+              if (!ok && context.mounted) {
+                showSoftSnack(context, 'No app found to open this file');
+              }
+            },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: MediaThumb(entry: e, cacheWidth: 200),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: sel ? p.accent : p.ring,
+                    width: sel ? 3 : 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (sel)
+            Positioned(
+              top: 5,
+              right: 5,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: p.accent,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(Icons.check_rounded, size: 13, color: p.bg),
+              ),
             ),
         ],
       ),
