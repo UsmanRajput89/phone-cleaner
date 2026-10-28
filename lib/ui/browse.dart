@@ -39,6 +39,13 @@ class _FolderRow {
 class _BrowsePageState extends State<BrowsePage> {
   Bucket _bucket = Bucket.whatsapp;
   List<_FolderRow>? _rows;
+  bool _bySize = false;
+
+  void _sortRows(List<_FolderRow> rows) {
+    rows.sort((a, b) => _bySize
+        ? b.bytes.compareTo(a.bytes)
+        : b.count.compareTo(a.count));
+  }
 
   @override
   void initState() {
@@ -52,8 +59,8 @@ class _BrowsePageState extends State<BrowsePage> {
     final stats = await c.store.folderStats(_bucket.name, Status.pending);
     final rows = stats.entries
         .map((e) => _FolderRow(e.key, e.value[0], e.value[1]))
-        .toList()
-      ..sort((a, b) => b.count.compareTo(a.count));
+        .toList();
+    _sortRows(rows);
     if (!mounted) return;
     setState(() => _rows = rows);
   }
@@ -103,8 +110,37 @@ class _BrowsePageState extends State<BrowsePage> {
             ),
           ),
           const SizedBox(height: 8),
-          Text('FOLDERS · NOT REVIEWED YET',
-              style: ts(context, 12, color: p.muted, letterSpacing: 1)),
+          Row(
+            children: [
+              Expanded(
+                child: Text('FOLDERS',
+                    style: ts(context, 12, color: p.muted, letterSpacing: 1)),
+              ),
+              SoftChip(
+                label: 'Most files',
+                selected: !_bySize,
+                onTap: () {
+                  if (!_bySize) return;
+                  setState(() {
+                    _bySize = false;
+                    if (_rows != null) _sortRows(_rows!);
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              SoftChip(
+                label: 'Largest',
+                selected: _bySize,
+                onTap: () {
+                  if (_bySize) return;
+                  setState(() {
+                    _bySize = true;
+                    if (_rows != null) _sortRows(_rows!);
+                  });
+                },
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           Expanded(
             child: rows == null
@@ -215,7 +251,8 @@ class _FolderPageState extends State<_FolderPage> {
   int _activeYm = 0;
 
   bool _loaded = false;
-  bool _newestFirst = true;
+  SortMode _sort = SortMode.newest;
+  bool get _bySize => _sort == SortMode.largest;
   bool _working = false;
   int _done = 0;
   int _total = 0;
@@ -264,12 +301,30 @@ class _FolderPageState extends State<_FolderPage> {
 
   void _regroup() {
     final list = List<FileEntry>.of(_all);
-    list.sort((a, b) => _newestFirst
-        ? b.mtime.compareTo(a.mtime)
-        : a.mtime.compareTo(b.mtime));
+    if (_bySize) {
+      list.sort((a, b) {
+        final c = b.size.compareTo(a.size);
+        return c != 0 ? c : a.path.compareTo(b.path);
+      });
+    } else {
+      list.sort((a, b) => _sort == SortMode.newest
+          ? b.mtime.compareTo(a.mtime)
+          : a.mtime.compareTo(b.mtime));
+    }
     final groups = <_Group>[];
     final index = <String, _Group>{};
     for (final e in list) {
+      if (_bySize) {
+        var g = index['size'];
+        if (g == null) {
+          g = _Group('size', 'Largest first', 0);
+          index['size'] = g;
+          groups.add(g);
+        }
+        g.items.add(e);
+        g.bytes += e.size;
+        continue;
+      }
       final d = DateTime.fromMillisecondsSinceEpoch(e.mtime);
       final key = '${d.year}-${d.month}-${d.day}';
       var g = index[key];
@@ -443,6 +498,7 @@ class _FolderPageState extends State<_FolderPage> {
   List<MapEntry<int, String>> _railItems() {
     // (ym, label); a negative key marks a year label.
     final out = <MapEntry<int, String>>[];
+    if (_bySize) return out;
     var lastYm = -1;
     var lastYear = -1;
     for (final g in _groups) {
@@ -507,7 +563,7 @@ class _FolderPageState extends State<_FolderPage> {
                             Text(
                                 selecting
                                     ? '${formatBytes(_selectedBytes)} selected'
-                                    : '${formatInt(_all.length)} files · ${formatBytes(_allBytes)} · all dates',
+                                    : '${formatInt(_all.length)} files · ${formatBytes(_allBytes)}${_bySize ? ' · by size' : ' · all dates'}',
                                 style: ts(context, 12, color: p.muted)),
                           ],
                         ),
@@ -531,27 +587,30 @@ class _FolderPageState extends State<_FolderPage> {
                 ),
                 SizedBox(
                   height: 44,
-                  child: Row(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                     children: [
                       for (final f in const [
-                        [true, 'Newest first'],
-                        [false, 'Oldest first'],
+                        [SortMode.newest, 'Newest'],
+                        [SortMode.oldest, 'Oldest'],
+                        [SortMode.largest, 'Largest'],
                       ]) ...[
                         SoftChip(
                           label: f[1] as String,
-                          selected: _newestFirst == (f[0] as bool),
+                          selected: _sort == (f[0] as SortMode),
                           onTap: () {
-                            if (_newestFirst == (f[0] as bool)) return;
+                            if (_sort == (f[0] as SortMode)) return;
                             setState(() {
-                              _newestFirst = f[0] as bool;
+                              _sort = f[0] as SortMode;
                               _regroup();
                             });
                             if (_scroll.hasClients) _scroll.jumpTo(0);
                           },
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                       ],
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       SoftTap(
                         label: 'Review whole folder one by one',
                         onTap: _working || _all.isEmpty
@@ -568,6 +627,7 @@ class _FolderPageState extends State<_FolderPage> {
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ),
                 Expanded(child: _content(context, selecting)),
@@ -657,14 +717,15 @@ class _FolderPageState extends State<_FolderPage> {
               style: ts(context, 15, color: p.muted)));
     }
     return LayoutBuilder(builder: (context, box) {
-      final listW = box.maxWidth - railW - 10;
+      final hasRail = !_bySize;
+      final listW = box.maxWidth - (hasRail ? railW + 10 : 0);
       final tile = ((listW - gap * 3) / 4).floorToDouble();
       _computeOffsets(tile);
       final rail = _railItems();
       return Stack(
         children: [
           Positioned.fill(
-            right: railW + 10,
+            right: hasRail ? railW + 10 : 0,
             child: ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.only(bottom: selecting ? 170 : 40),
@@ -694,6 +755,7 @@ class _FolderPageState extends State<_FolderPage> {
               },
             ),
           ),
+          if (hasRail)
           Positioned(
             right: 0,
             top: 4,
@@ -772,7 +834,7 @@ class _FolderPageState extends State<_FolderPage> {
             ),
             const SizedBox(width: 8),
             SoftTap(
-              label: all ? 'Unselect day' : 'Select day',
+              label: all ? 'Unselect group' : 'Select group',
               onTap: _working ? null : () => _toggleDay(g),
               child: Container(
                 height: 30,
@@ -826,6 +888,19 @@ class _FolderPageState extends State<_FolderPage> {
               ),
             ),
           ),
+          if (_bySize)
+            Positioned(
+              left: 5,
+              bottom: 5,
+              child: Container(
+                height: 18,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: raisedDeco(p, radius: 9),
+                child: Text(formatBytes(e.size),
+                    style: ts(context, 10, weight: FontWeight.w500)),
+              ),
+            ),
           if (sel)
             Positioned(
               top: 5,
