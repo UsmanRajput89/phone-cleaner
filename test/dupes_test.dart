@@ -157,6 +157,14 @@ void main() {
       expect(await store.dupGroupOf('100-x'), isNull);
     });
 
+    test('releaseGroup stops kept copies counting as duplicates', () async {
+      await store.releaseGroup('100-x');
+      expect(await store.dupGroupOf('100-x'), isNull);
+      expect((await store.dupStats()).groups, 0);
+      store.hideDupes = true;
+      expect(await store.count(const FileQuery(limit: 100)), 5);
+    });
+
     test('setKeeper switches the kept copy', () async {
       await store.setKeeper('100-x', '$old/a.jpg');
       final g = (await store.dupGroups()).single;

@@ -417,6 +417,15 @@ class Store {
     await batch.commit(noResult: true);
   }
 
+  /// You decided to keep several copies on purpose: they stop counting as
+  /// duplicates of each other (each gets a private hash marker).
+  Future<void> releaseGroup(String hash) async {
+    await db.rawUpdate(
+        "UPDATE files SET hash = 'k:' || path, dup = 0 "
+        'WHERE hash = ? AND status IN (0, 1)',
+        [hash]);
+  }
+
   /// Makes [path] the copy that stays in its group.
   Future<void> setKeeper(String hash, String path) async {
     final batch = db.batch();
