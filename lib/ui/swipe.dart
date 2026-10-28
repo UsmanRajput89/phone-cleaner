@@ -41,7 +41,18 @@ class SwipePage extends StatefulWidget {
   /// decide for the file applies to every copy.
   final Map<String, List<FileEntry>>? copies;
 
-  const SwipePage({super.key, this.entries, this.title, this.copies});
+  /// Starting filters for the normal (non-fixed) mode.
+  final Set<Kind>? initialKinds;
+  final SortMode? initialSort;
+
+  const SwipePage({
+    super.key,
+    this.entries,
+    this.title,
+    this.copies,
+    this.initialKinds,
+    this.initialSort,
+  });
 
   @override
   State<SwipePage> createState() => _SwipePageState();
@@ -55,6 +66,7 @@ class _SwipePageState extends State<SwipePage>
   final List<FileEntry> _queue = [];
   final List<_Act> _history = [];
   final Set<Bucket> _buckets = {};
+  final Set<Kind> _kinds = {};
   SortMode _sort = SortMode.oldest;
 
   bool get _fixed => widget.entries != null;
@@ -78,6 +90,8 @@ class _SwipePageState extends State<SwipePage>
   @override
   void initState() {
     super.initState();
+    _kinds.addAll(widget.initialKinds ?? const <Kind>{});
+    _sort = widget.initialSort ?? _sort;
     _anim = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 180));
     _anim.addListener(() {
@@ -124,7 +138,7 @@ class _SwipePageState extends State<SwipePage>
     if (reset) _queue.clear();
     for (var attempt = 0; attempt < 5; attempt++) {
       final rows = await c.store.query(FileQuery(
-        kinds: const [Kind.image, Kind.video],
+        kinds: _kinds.isEmpty ? const [Kind.image, Kind.video] : _kinds.toList(),
         buckets: _activeBuckets(c),
         sort: _sort,
         limit: 40,
@@ -384,7 +398,7 @@ class _SwipePageState extends State<SwipePage>
           }
 
           return SafeArea(
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -399,6 +413,34 @@ class _SwipePageState extends State<SwipePage>
                         selected: _sort == s,
                         onTap: () => apply(() => _sort = s),
                       ),
+                  ]),
+                  const SizedBox(height: 20),
+                  Text('Type', style: ts(ctx, 13, color: p.muted)),
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 12, runSpacing: 12, children: [
+                    SoftChip(
+                      label: 'All',
+                      selected: _kinds.isEmpty,
+                      onTap: () => apply(() => _kinds.clear()),
+                    ),
+                    SoftChip(
+                      label: 'Photos',
+                      selected: _kinds.length == 1 && _kinds.contains(Kind.image),
+                      onTap: () => apply(() {
+                        _kinds
+                          ..clear()
+                          ..add(Kind.image);
+                      }),
+                    ),
+                    SoftChip(
+                      label: 'Videos',
+                      selected: _kinds.length == 1 && _kinds.contains(Kind.video),
+                      onTap: () => apply(() {
+                        _kinds
+                          ..clear()
+                          ..add(Kind.video);
+                      }),
+                    ),
                   ]),
                   const SizedBox(height: 20),
                   Text('Folders', style: ts(ctx, 13, color: p.muted)),
@@ -448,7 +490,10 @@ class _SwipePageState extends State<SwipePage>
     final folders = _buckets.isEmpty
         ? 'All folders'
         : _buckets.map(bucketLabel).join(', ');
-    return '$folders, ${_sortLabel(_sort).toLowerCase()}';
+    final type = _kinds.length == 1
+        ? (_kinds.contains(Kind.video) ? 'Videos' : 'Photos')
+        : null;
+    return '${type == null ? '' : '$type, '}$folders, ${_sortLabel(_sort).toLowerCase()}';
   }
 
   @override

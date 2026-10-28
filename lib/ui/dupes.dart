@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../app/controller.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
+import '../core/classify.dart';
 import '../core/models.dart';
 import '../native.dart';
 import 'media.dart';
@@ -192,6 +193,26 @@ class _MovedCopy {
   _MovedCopy(this.entry, this.trashPath);
 }
 
+/// File-type bucket used by the type chips.
+String dupType(FileEntry e) {
+  if (e.kind == Kind.image) return 'photos';
+  if (e.kind == Kind.video) return 'videos';
+  for (final k in const ['pdf', 'docs', 'zip', 'apk']) {
+    if (extGroups[k]!.contains(e.ext)) return k;
+  }
+  return 'other';
+}
+
+const List<List<String>> _dupTypes = [
+  ['photos', 'Photos'],
+  ['videos', 'Videos'],
+  ['pdf', 'PDFs'],
+  ['docs', 'Documents'],
+  ['zip', 'Archives'],
+  ['apk', 'APKs'],
+  ['other', 'Other'],
+];
+
 /// One group at a time, every copy on screen, each marked Keep or Delete.
 class ComparePage extends StatefulWidget {
   const ComparePage({super.key});
@@ -201,10 +222,10 @@ class ComparePage extends StatefulWidget {
 }
 
 class _ComparePageState extends State<ComparePage> {
-  final List<DupGroup> _groups = [];
+  final List<DupGroup> _groups = []; // groups still to review
   final List<_Applied> _history = [];
   Set<String> _delete = {};
-  int _i = 0;
+  String _type = 'all';
   bool _loading = true;
   bool _busy = false;
 
@@ -230,7 +251,14 @@ class _ComparePageState extends State<ComparePage> {
     });
   }
 
-  DupGroup? get _group => _i < _groups.length ? _groups[_i] : null;
+  List<DupGroup> get _view => _type == 'all'
+      ? _groups
+      : _groups.where((g) => dupType(g.keeper) == _type).toList();
+
+  DupGroup? get _group {
+    final v = _view;
+    return v.isEmpty ? null : v.first;
+  }
 
   void _resetMarks() {
     final g = _group;
@@ -279,7 +307,8 @@ class _ComparePageState extends State<ComparePage> {
     c.refreshCountsSoon();
     if (!mounted) return;
     setState(() {
-      _i++;
+      _groups.removeWhere((x) => identical(x, g));
+      if (_view.isEmpty && _groups.isNotEmpty) _type = 'all';
       _busy = false;
       _resetMarks();
     });
@@ -291,6 +320,7 @@ class _ComparePageState extends State<ComparePage> {
     setState(() => _busy = true);
     final c = AppScope.read(context);
     final a = _history.removeLast();
+    DupGroup back = a.group;
     try {
       if (a.released) {
         final movedPaths = {for (final m in a.moved) m.entry.path};
@@ -305,18 +335,56 @@ class _ComparePageState extends State<ComparePage> {
         } catch (_) {}
       }
       await c.store.reassignGroup(a.group.hash);
-      final fresh = await c.store.dupGroupOf(a.group.hash);
-      if (fresh != null && _i > 0) _groups[_i - 1] = fresh;
+      back = (await c.store.dupGroupOf(a.group.hash)) ?? a.group;
       c.refreshCountsSoon();
     } catch (_) {
       if (mounted) showSoftSnack(context, 'Could not undo that');
     }
     if (!mounted) return;
     setState(() {
-      if (_i > 0) _i--;
+      _groups.insert(0, back);
+      if (_type != 'all' && dupType(back.keeper) != _type) _type = 'all';
       _busy = false;
       _resetMarks();
     });
+  }
+
+  Widget _typeChips(BuildContext context) {
+    final counts = <String, int>{};
+    for (final g in _groups) {
+      final t = dupType(g.keeper);
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    final chips = <Widget>[
+      SoftChip(
+        label: 'All ${_groups.length}',
+        selected: _type == 'all',
+        onTap: () => setState(() {
+          _type = 'all';
+          _resetMarks();
+        }),
+      ),
+      for (final t in _dupTypes)
+        if ((counts[t[0]] ?? 0) > 0)
+          SoftChip(
+            label: '${t[1]} ${counts[t[0]]}',
+            selected: _type == t[0],
+            onTap: () => setState(() {
+              _type = t[0];
+              _resetMarks();
+            }),
+          ),
+    ];
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) => chips[i],
+      ),
+    );
   }
 
   @override
@@ -344,7 +412,7 @@ class _ComparePageState extends State<ComparePage> {
                       Text(
                           g == null
                               ? 'Duplicates'
-                              : '${_i + 1} / ${_groups.length}',
+                              : '${_view.length} groups left',
                           style: ts(context, 20)),
                       if (g != null)
                         Text(
@@ -360,7 +428,11 @@ class _ComparePageState extends State<ComparePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            if (!_loading && _groups.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _typeChips(context),
+            ],
+            const SizedBox(height: 8),
             Expanded(child: _body(context, g)),
           ],
         ),
@@ -378,7 +450,7 @@ class _ComparePageState extends State<ComparePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_groups.isEmpty ? 'Nothing to review' : 'All reviewed',
+            Text(_groups.isEmpty ? 'All reviewed' : 'None of this type left',
                 style: ts(context, 22, weight: FontWeight.w300)),
             const SizedBox(height: 20),
             SoftPill(

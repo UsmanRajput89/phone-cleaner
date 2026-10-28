@@ -29,6 +29,8 @@ class AppController extends ChangeNotifier {
   bool hideDupes = true;
   Counts? counts;
   DupStats dupStats = DupStats.none;
+  int videoCount = 0;
+  int videoBytes = 0;
   bool dupEverScanned = false;
   bool dupScanning = false;
   int dupDone = 0;
@@ -87,6 +89,14 @@ class AppController extends ChangeNotifier {
   Future<void> refreshCounts() async {
     counts = await store.counts(whatsappOff: !includeWhatsApp);
     dupStats = await store.dupStats();
+    final vq = FileQuery(
+      kinds: const [Kind.video],
+      buckets: Bucket.values
+          .where((b) => b != Bucket.whatsapp || includeWhatsApp)
+          .toList(),
+    );
+    videoCount = await store.count(vq);
+    videoBytes = await store.sumSize(vq);
     notifyListeners();
   }
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phone_cleaner/core/dupes.dart';
+import 'package:phone_cleaner/ui/dupes.dart' show dupType;
 import 'package:phone_cleaner/core/models.dart';
 import 'package:phone_cleaner/core/store.dart';
 import 'package:sqflite/sqflite.dart';
@@ -68,6 +69,32 @@ void main() {
     expect(h[0], h[1]);
     expect(h[0], isNot(h[2]));
     expect(h[3], startsWith('e:'));
+  });
+
+  test('dupType buckets files by type', () {
+    FileEntry e(String ext, Kind k) => FileEntry(
+        path: '/x/a.$ext', size: 1, mtime: 1, bucket: Bucket.other, kind: k, ext: ext);
+    expect(dupType(e('jpg', Kind.image)), 'photos');
+    expect(dupType(e('mp4', Kind.video)), 'videos');
+    expect(dupType(e('pdf', Kind.other)), 'pdf');
+    expect(dupType(e('docx', Kind.other)), 'docs');
+    expect(dupType(e('zip', Kind.other)), 'zip');
+    expect(dupType(e('apk', Kind.other)), 'apk');
+    expect(dupType(e('opus', Kind.other)), 'other');
+  });
+
+  test('voice notes rows are purged but ToDelete rows are kept', () async {
+    sqfliteFfiInit();
+    final st = await Store.open(path: inMemoryDatabasePath);
+    await st.insertScanned([
+      f('/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Voice Notes/2024/a.opus'),
+      f('/storage/emulated/0/FMWhatsApp/Media/WhatsApp Voice Notes/b.opus'),
+      f('/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/c.jpg'),
+    ]);
+    await st.purgeStickers();
+    final rows = await st.query(const FileQuery(limit: 10));
+    expect(rows.map((r) => r.name), ['c.jpg']);
+    await st.close();
   });
 
   group('store', () {

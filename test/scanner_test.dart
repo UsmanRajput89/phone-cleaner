@@ -57,6 +57,16 @@ void main() {
           'WhatsApp Stickers'
         ]),
         true);
+    expect(
+        shouldSkipDir([
+          'Android', 'media', 'com.whatsapp', 'WhatsApp', 'Media',
+          'WhatsApp Voice Notes'
+        ]),
+        true);
+    expect(shouldSkipDir(['FMWhatsApp', 'Media', 'WhatsApp Voice Notes']), true);
+    expect(
+        shouldSkipDir(['YoWhatsApp Backup', 'Media', 'YoWhatsApp Voice Notes']),
+        true);
     expect(shouldSkipDir(['DCIM', 'Camera']), false);
   });
 

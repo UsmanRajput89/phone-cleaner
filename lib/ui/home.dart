@@ -7,6 +7,7 @@ import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/models.dart';
 import 'dupes.dart';
+import 'swipe.dart';
 import 'settings.dart';
 import 'soft.dart';
 
@@ -116,6 +117,8 @@ class HomePage extends StatelessWidget {
           SoftPill(label: 'Continue swiping', onTap: onOpenSwipe),
           const SizedBox(height: 14),
           _DupCard(c: c),
+          const SizedBox(height: 14),
+          _VideoCard(c: c),
           const SizedBox(height: 22),
           Text(
             'LEFT TO REVIEW',
@@ -297,6 +300,52 @@ class _DupCard extends StatelessWidget {
                   Text(title, style: ts(context, 15)),
                   const SizedBox(height: 2),
                   Text(sub, style: ts(context, 12, color: p.muted)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: p.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoCard extends StatelessWidget {
+  final AppController c;
+
+  const _VideoCard({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.soft;
+    return SoftTap(
+      label: 'Videos, largest first',
+      onTap: c.videoCount == 0
+          ? null
+          : () async {
+              await Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const SwipePage(
+                      initialKinds: {Kind.video},
+                      initialSort: SortMode.largest)));
+              c.refreshCountsSoon();
+            },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: raisedDeco(p),
+        child: Row(
+          children: [
+            Icon(Icons.videocam_outlined, color: p.accent, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Videos, largest first', style: ts(context, 15)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${formatInt(c.videoCount)} to review · ${formatBytes(c.videoBytes)}',
+                      style: ts(context, 12, color: p.muted)),
                 ],
               ),
             ),

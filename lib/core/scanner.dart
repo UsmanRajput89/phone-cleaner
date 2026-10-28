@@ -18,6 +18,10 @@ class ScanConfig {
   });
 }
 
+/// WhatsApp voice-note folders (also in FM / Aero / Yo variants): not reviewed.
+bool isVoiceNotesDirName(String lowerName) =>
+    lowerName.contains('voice notes');
+
 bool isStickerDirName(String lowerName) =>
     lowerName == 'whatsapp stickers' ||
     lowerName == 'whatsapp animated gifs' ||
@@ -40,6 +44,7 @@ bool shouldSkipDir(List<String> segs) {
   // Stickers and animated GIFs are never worth reviewing (and are mostly dupes).
   if (inWhatsApp && isStickerDirName(last)) return true;
   if (inWhatsApp && (last == 'databases' || last == 'backups')) return true;
+  if (inWhatsApp && isVoiceNotesDirName(last)) return true;
 
   if (lower[0] == 'android') {
     if (lower.length == 1) return false;

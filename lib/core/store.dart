@@ -258,13 +258,16 @@ class Store {
     }
   }
 
-  /// Drops sticker / animated-gif rows (from earlier scans) that are not in ToDelete.
+  /// Drops sticker / animated-gif / voice-note rows (from earlier scans) that
+  /// are not in ToDelete. Only the app's list is touched, never the files.
   Future<void> purgeStickers() async {
     await db.delete(
       'files',
       where: "status != 2 AND (lower(path) LIKE '%/whatsapp stickers/%' "
           "OR lower(path) LIKE '%/whatsapp animated gifs/%' "
-          "OR lower(path) LIKE '%/whatsapp/%/stickers/%')",
+          "OR lower(path) LIKE '%/whatsapp/%/stickers/%' "
+          "OR lower(path) LIKE '%whatsapp%/voice notes/%' "
+          "OR lower(path) LIKE '%whatsapp voice notes/%')",
     );
   }
 
