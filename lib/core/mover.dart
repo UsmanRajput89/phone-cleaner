@@ -10,9 +10,12 @@ class Mover {
 
   Mover(this.trashDir);
 
-  Future<String> moveToTrash(String path) async {
-    await Directory(trashDir).create(recursive: true);
-    final target = await _uniquePath(trashDir, p.basename(path));
+  Future<String> moveToTrash(String path) => moveInto(path, trashDir);
+
+  /// Moves a file into [dir] (created if missing). Returns the new path.
+  Future<String> moveInto(String path, String dir) async {
+    await Directory(dir).create(recursive: true);
+    final target = await _uniquePath(dir, p.basename(path));
     await _moveFile(path, target);
     return target;
   }

@@ -9,15 +9,18 @@ import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/classify.dart';
 import '../core/models.dart';
+import 'folders.dart';
 import 'media.dart';
 import 'soft.dart';
 
+enum _Do { keep, trash, folder }
+
 class _Act {
   final FileEntry entry;
-  final bool keep;
-  final String? trashPath;
+  final _Do kind;
+  final String? movedPath;
 
-  _Act(this.entry, this.keep, this.trashPath);
+  _Act(this.entry, this.kind, this.movedPath);
 }
 
 class SwipePage extends StatefulWidget {
@@ -42,8 +45,11 @@ class _SwipePageState extends State<SwipePage>
   bool _busy = false;
 
   double _dx = 0;
+  double _dy = 0;
   double _from = 0;
   double _to = 0;
+  double _fromY = 0;
+  double _toY = 0;
   VoidCallback? _after;
   late final AnimationController _anim;
 
@@ -54,7 +60,10 @@ class _SwipePageState extends State<SwipePage>
         vsync: this, duration: const Duration(milliseconds: 180));
     _anim.addListener(() {
       final t = Curves.easeOut.transform(_anim.value);
-      setState(() => _dx = _from + (_to - _from) * t);
+      setState(() {
+        _dx = _from + (_to - _from) * t;
+        _dy = _fromY + (_toY - _fromY) * t;
+      });
     });
     _anim.addStatusListener((s) {
       if (s == AnimationStatus.completed) {
@@ -120,41 +129,90 @@ class _SwipePageState extends State<SwipePage>
     }
   }
 
-  void _animateTo(double to, {VoidCallback? after}) {
+  void _animateTo(double to, {double toY = 0, VoidCallback? after}) {
     _from = _dx;
     _to = to;
+    _fromY = _dy;
+    _toY = toY;
     _after = after;
     _anim.forward(from: 0);
   }
 
   void _onDragEnd(DragEndDetails d) {
-    final v = d.primaryVelocity ?? 0;
-    if (_dx > 110 || v > 900) {
-      _commit(true);
-    } else if (_dx < -110 || v < -900) {
-      _commit(false);
+    final vx = d.velocity.pixelsPerSecond.dx;
+    final vy = d.velocity.pixelsPerSecond.dy;
+    final upward = _dy < 0 && _dy.abs() > _dx.abs() * 1.2;
+    if (upward && (_dy < -110 || vy < -900)) {
+      _commit(_Do.folder);
+    } else if (_dx > 110 || vx > 900) {
+      _commit(_Do.keep);
+    } else if (_dx < -110 || vx < -900) {
+      _commit(_Do.trash);
     } else {
       _animateTo(0);
     }
   }
 
-  void _commit(bool keep) {
-    if (_busy || _queue.isEmpty) return;
-    setState(() => _busy = true);
-    final w = MediaQuery.of(context).size.width;
-    _animateTo(keep ? w : -w, after: () => _finish(keep));
+  /// Makes sure a target folder is set. Returns false if the user cancelled.
+  Future<bool> _ensureTarget() async {
+    final c = AppScope.read(context);
+    if (c.targetFolder != null) return true;
+    final f = await pickSafeFolder(context);
+    if (f == null || !mounted) return false;
+    c.setTargetFolder(f);
+    return true;
   }
 
-  Future<void> _finish(bool keep) async {
+  Future<void> _chooseTarget() async {
+    final c = AppScope.read(context);
+    final f = await pickSafeFolder(context);
+    if (f == null || !mounted) return;
+    c.setTargetFolder(f);
+  }
+
+  Future<void> _commit(_Do what) async {
+    if (_busy || _queue.isEmpty) return;
+    setState(() => _busy = true);
+    if (what == _Do.folder) {
+      final ok = await _ensureTarget();
+      if (!mounted) return;
+      if (!ok) {
+        setState(() => _busy = false);
+        _animateTo(0);
+        return;
+      }
+    }
+    final size = MediaQuery.of(context).size;
+    switch (what) {
+      case _Do.keep:
+        _animateTo(size.width, after: () => _finish(what));
+        break;
+      case _Do.trash:
+        _animateTo(-size.width, after: () => _finish(what));
+        break;
+      case _Do.folder:
+        _animateTo(0, toY: -size.height, after: () => _finish(what));
+        break;
+    }
+  }
+
+  Future<void> _finish(_Do what) async {
     final c = AppScope.read(context);
     final entry = _queue.first;
     try {
-      if (keep) {
-        await c.keep(entry);
-        _history.add(_Act(entry, true, null));
-      } else {
-        final trashPath = await c.moveToTrash(entry);
-        _history.add(_Act(entry, false, trashPath));
+      switch (what) {
+        case _Do.keep:
+          await c.keep(entry);
+          _history.add(_Act(entry, _Do.keep, null));
+          break;
+        case _Do.trash:
+          final trashPath = await c.moveToTrash(entry);
+          _history.add(_Act(entry, _Do.trash, trashPath));
+          break;
+        case _Do.folder:
+          final moved = await c.moveToFolder(entry, c.targetFolder!);
+          _history.add(_Act(entry, _Do.folder, moved));
+          break;
       }
       if (_history.length > 20) _history.removeAt(0);
       HapticFeedback.selectionClick();
@@ -162,6 +220,7 @@ class _SwipePageState extends State<SwipePage>
       setState(() {
         _queue.removeAt(0);
         _dx = 0;
+        _dy = 0;
         _batch++;
         _busy = false;
       });
@@ -179,6 +238,7 @@ class _SwipePageState extends State<SwipePage>
       setState(() {
         if (!stillThere && _queue.isNotEmpty) _queue.removeAt(0);
         _dx = 0;
+        _dy = 0;
         _busy = false;
       });
       if (stillThere) showSoftSnack(context, 'Could not move that file');
@@ -192,12 +252,12 @@ class _SwipePageState extends State<SwipePage>
     final a = _history.removeLast();
     try {
       FileEntry back;
-      if (a.keep) {
+      if (a.kind == _Do.keep) {
         await c.unkeep(a.entry);
         back = a.entry.copyWith(status: Status.pending);
       } else {
         final newPath =
-            await c.restore(a.trashPath!, a.entry.path, Status.pending);
+            await c.restore(a.movedPath!, a.entry.path, Status.pending);
         back = a.entry.copyWith(path: newPath, status: Status.pending);
       }
       if (!mounted) return;
@@ -206,6 +266,7 @@ class _SwipePageState extends State<SwipePage>
         _batch = _batch > 0 ? _batch - 1 : 0;
         _busy = false;
         _dx = 0;
+        _dy = 0;
       });
       c.refreshCountsSoon();
     } catch (_) {
@@ -348,6 +409,8 @@ class _SwipePageState extends State<SwipePage>
   Widget build(BuildContext context) {
     final p = context.soft;
     final canAct = !_busy && _queue.isNotEmpty;
+    final c = AppScope.of(context);
+    final target = c.targetFolder;
     return SoftScaffold(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -387,9 +450,37 @@ class _SwipePageState extends State<SwipePage>
             ),
             const SizedBox(height: 12),
             SoftSlot(value: _batch / batchSize),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
+            SoftTap(
+              onTap: _busy ? null : _chooseTarget,
+              label: 'Choose target folder',
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: raisedDeco(p, radius: 18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_upward_rounded, size: 16, color: p.accent),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        target == null
+                            ? 'Swipe up: choose folder'
+                            : 'Swipe up: ${pth.basename(target)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ts(context, 13,
+                            weight: FontWeight.w500, color: p.accent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             Expanded(child: _body(context)),
-            const SizedBox(height: 28),
+            const SizedBox(height: 22),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,33 +490,45 @@ class _SwipePageState extends State<SwipePage>
                   child: SoftIconButton(
                     icon: Icons.close_rounded,
                     label: 'Move to ToDelete',
-                    size: 68,
+                    size: 64,
                     iconSize: 28,
                     color: p.remove,
-                    onTap: canAct ? () => _commit(false) : null,
+                    onTap: canAct ? () => _commit(_Do.trash) : null,
                   ),
                 ),
-                const SizedBox(width: 30),
+                const SizedBox(width: 16),
                 _ActionColumn(
                   label: 'Undo',
                   topPad: 10,
                   child: SoftIconButton(
                     icon: Icons.undo_rounded,
                     label: 'Undo',
-                    size: 48,
+                    size: 44,
                     onTap: (!_busy && _history.isNotEmpty) ? _undo : null,
                   ),
                 ),
-                const SizedBox(width: 30),
+                const SizedBox(width: 16),
+                _ActionColumn(
+                  label: 'Folder',
+                  child: SoftIconButton(
+                    icon: Icons.folder_special_outlined,
+                    label: 'Move to target folder',
+                    size: 64,
+                    iconSize: 26,
+                    color: p.accent,
+                    onTap: canAct ? () => _commit(_Do.folder) : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
                 _ActionColumn(
                   label: 'Keep',
                   child: SoftIconButton(
                     icon: Icons.check_rounded,
                     label: 'Keep',
-                    size: 68,
+                    size: 64,
                     iconSize: 28,
                     color: p.keep,
-                    onTap: canAct ? () => _commit(true) : null,
+                    onTap: canAct ? () => _commit(_Do.keep) : null,
                   ),
                 ),
               ],
@@ -461,17 +564,23 @@ class _SwipePageState extends State<SwipePage>
       );
     }
     final entry = _queue.first;
+    final target = AppScope.of(context).targetFolder;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragUpdate:
-          _busy ? null : (d) => setState(() => _dx += d.delta.dx),
-      onHorizontalDragEnd: _busy ? null : _onDragEnd,
+      onPanUpdate: _busy
+          ? null
+          : (d) => setState(() {
+                _dx += d.delta.dx;
+                _dy = (_dy + d.delta.dy).clamp(-600.0, 40.0).toDouble();
+              }),
+      onPanEnd: _busy ? null : _onDragEnd,
+      onPanCancel: _busy ? null : () => _animateTo(0),
       onTap: entry.kind == Kind.video
           ? () => Navigator.of(context).push(MaterialPageRoute<void>(
               builder: (_) => VideoPage(path: entry.path)))
           : null,
       child: Transform.translate(
-        offset: Offset(_dx, 0),
+        offset: Offset(_dx, _dy < 0 ? _dy : 0),
         child: Transform.rotate(
           angle: (_dx / 700).clamp(-0.4, 0.4).toDouble(),
           alignment: Alignment.bottomCenter,
@@ -479,6 +588,8 @@ class _SwipePageState extends State<SwipePage>
             key: ValueKey(entry.path),
             entry: entry,
             dx: _dx,
+            dy: _dy,
+            folderName: target == null ? null : pth.basename(target),
             cacheWidth: cardCacheWidth,
           ),
         ),
@@ -517,21 +628,29 @@ class _ActionColumn extends StatelessWidget {
 class _PhotoCard extends StatelessWidget {
   final FileEntry entry;
   final double dx;
+  final double dy;
+  final String? folderName;
   final int cacheWidth;
 
   const _PhotoCard({
     super.key,
     required this.entry,
     required this.dx,
+    required this.dy,
+    required this.folderName,
     required this.cacheWidth,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = context.soft;
-    final showRing = dx.abs() > 30;
-    final toDelete = dx < 0;
-    final tint = toDelete ? p.remove : p.keep;
+    final up = dy < -30 && dy.abs() > dx.abs() * 1.2;
+    final showRing = up || dx.abs() > 30;
+    final toDelete = !up && dx < 0;
+    final tint = up ? p.accent : (toDelete ? p.remove : p.keep);
+    final chipText = up
+        ? (folderName ?? 'Choose folder')
+        : (toDelete ? 'To delete' : 'Keep');
     final folder = pth.basename(pth.dirname(entry.path));
     return Container(
       padding: const EdgeInsets.all(10),
@@ -567,7 +686,7 @@ class _PhotoCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   alignment: Alignment.center,
                   decoration: raisedDeco(p, radius: 16),
-                  child: Text(toDelete ? 'To delete' : 'Keep',
+                  child: Text(chipText,
                       style: ts(context, 13,
                           weight: FontWeight.w500, color: tint)),
                 ),

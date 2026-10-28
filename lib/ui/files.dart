@@ -9,6 +9,7 @@ import '../app/theme.dart';
 import '../core/classify.dart';
 import '../core/models.dart';
 import '../native.dart';
+import 'folders.dart';
 import 'soft.dart';
 
 /// List mode: documents, PDFs, APKs, zips and everything that is not a photo
@@ -136,9 +137,14 @@ class _FilesPageState extends State<FilesPage> {
     return sum;
   }
 
-  Future<void> _apply({required bool move}) async {
+  Future<void> _apply({required String mode}) async {
     if (_working || _selected.isEmpty) return;
     final c = AppScope.read(context);
+    String? folder;
+    if (mode == 'folder') {
+      folder = await pickSafeFolder(context);
+      if (folder == null || !mounted) return;
+    }
     final targets = _items.where((e) => _selected.contains(e.path)).toList();
     setState(() {
       _working = true;
@@ -148,8 +154,10 @@ class _FilesPageState extends State<FilesPage> {
     var failed = 0;
     for (final e in targets) {
       try {
-        if (move) {
+        if (mode == 'trash') {
           await c.moveToTrash(e);
+        } else if (mode == 'folder') {
+          await c.moveToFolder(e, folder!);
         } else {
           await c.keep(e);
         }
@@ -168,7 +176,9 @@ class _FilesPageState extends State<FilesPage> {
     });
     widget.onSelectionChanged(_selected.isNotEmpty);
     c.refreshCountsSoon();
-    final verb = move ? 'Moved' : 'Kept';
+    final verb = mode == 'keep'
+        ? 'Kept'
+        : (mode == 'folder' ? 'Moved to ${pth.basename(folder!)}:' : 'Moved');
     showSoftSnack(
       context,
       failed == 0
@@ -303,7 +313,7 @@ class _FilesPageState extends State<FilesPage> {
     }
     return ListView.builder(
       controller: _scroll,
-      padding: EdgeInsets.only(bottom: selecting ? 100 : 110),
+      padding: EdgeInsets.only(bottom: selecting ? 150 : 110),
       itemCount: _items.length + (_more ? 1 : 0),
       itemBuilder: (context, i) {
         if (i >= _items.length) {
@@ -339,27 +349,38 @@ class _FilesPageState extends State<FilesPage> {
             style: ts(context, 15, color: p.muted)),
       );
     }
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          flex: 2,
-          child: SoftPill(
-            label: 'Keep',
-            color: p.keep,
-            height: 56,
-            onTap: () => _apply(move: false),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: SoftPill(
+                label: 'Keep',
+                color: p.keep,
+                height: 52,
+                onTap: () => _apply(mode: 'keep'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SoftPill(
+                label: 'To folder',
+                icon: Icons.folder_special_outlined,
+                color: p.accent,
+                height: 52,
+                onTap: () => _apply(mode: 'folder'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 5,
-          child: SoftPill(
-            label:
-                'Move ${_selected.length} to ToDelete · ${formatBytes(_selectedBytes)}',
-            color: p.remove,
-            height: 56,
-            onTap: () => _apply(move: true),
-          ),
+        const SizedBox(height: 10),
+        SoftPill(
+          label:
+              'Move ${_selected.length} to ToDelete · ${formatBytes(_selectedBytes)}',
+          color: p.remove,
+          height: 52,
+          onTap: () => _apply(mode: 'trash'),
         ),
       ],
     );

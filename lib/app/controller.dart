@@ -16,6 +16,7 @@ import '../native.dart';
 class AppController extends ChangeNotifier {
   static const String rootPath = '/storage/emulated/0';
   static const String trashPath = '/storage/emulated/0/ToDelete';
+  static const String safePath = '/storage/emulated/0/Safe';
 
   final Store store;
   final Mover mover;
@@ -174,6 +175,58 @@ class AppController extends ChangeNotifier {
   Future<String> moveToTrash(FileEntry e) async {
     final newPath = await mover.moveToTrash(e.path);
     await store.markMoved(e.path, newPath);
+    rescanner.add([e.path, newPath]);
+    return newPath;
+  }
+
+  /// Folder that "move to folder" (swipe up) sends files to. Not remembered
+  /// between app launches on purpose.
+  String? targetFolder;
+
+  void setTargetFolder(String? path) {
+    targetFolder = path;
+    notifyListeners();
+  }
+
+  Future<List<String>> listSafeFolders() async {
+    final dir = Directory(safePath);
+    if (!await dir.exists()) return [];
+    final out = <String>[];
+    await for (final e in dir.list(followLinks: false)) {
+      if (e is Directory && !p.basename(e.path).startsWith('.')) out.add(e.path);
+    }
+    out.sort((a, b) => p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()));
+    return out;
+  }
+
+  /// Cleans a typed folder name. Returns null when nothing usable is left.
+  static String? cleanFolderName(String raw) {
+    var n = raw.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), ' ');
+    n = n.replaceAll(RegExp(r'\s+'), ' ').trim();
+    while (n.startsWith('.')) {
+      n = n.substring(1).trim();
+    }
+    if (n.length > 60) n = n.substring(0, 60).trim();
+    return n.isEmpty ? null : n;
+  }
+
+  /// Creates (or reuses) Safe/<name>. Returns its path, or null for a bad name.
+  Future<String?> createSafeFolder(String name) async {
+    final clean = cleanFolderName(name);
+    if (clean == null) return null;
+    final existing = await listSafeFolders();
+    for (final f in existing) {
+      if (p.basename(f).toLowerCase() == clean.toLowerCase()) return f;
+    }
+    final path = p.join(safePath, clean);
+    await Directory(path).create(recursive: true);
+    return path;
+  }
+
+  /// Moves the file into [folderPath] and counts it as kept. Returns new path.
+  Future<String> moveToFolder(FileEntry e, String folderPath) async {
+    final newPath = await mover.moveInto(e.path, folderPath);
+    await store.markMovedKept(e.path, newPath);
     rescanner.add([e.path, newPath]);
     return newPath;
   }

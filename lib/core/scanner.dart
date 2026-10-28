@@ -9,8 +9,13 @@ import 'models.dart';
 class ScanConfig {
   final String root;
   final String trashName;
+  final String safeName;
 
-  const ScanConfig({required this.root, this.trashName = 'ToDelete'});
+  const ScanConfig({
+    required this.root,
+    this.trashName = 'ToDelete',
+    this.safeName = 'Safe',
+  });
 }
 
 bool isStickerDirName(String lowerName) =>
@@ -70,7 +75,10 @@ List<ScannedFile> scanTree(ScanConfig cfg) {
       final segs = p.split(rel);
       final name = segs.last;
       if (e is Directory) {
-        if (segs.length == 1 && name == cfg.trashName) continue;
+        if (segs.length == 1 &&
+            (name == cfg.trashName || name == cfg.safeName)) {
+          continue;
+        }
         if (shouldSkipDir(segs)) continue;
         stack.add(e);
       } else if (e is File) {

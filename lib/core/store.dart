@@ -182,6 +182,16 @@ class Store {
         where: 'path = ?', whereArgs: [path]);
   }
 
+  /// File moved into a Safe folder: counts as kept, remembers where it came from.
+  Future<void> markMovedKept(String oldPath, String newPath) async {
+    await db.update(
+      'files',
+      {'path': newPath, 'status': Status.kept, 'orig_path': oldPath},
+      where: 'path = ?',
+      whereArgs: [oldPath],
+    );
+  }
+
   Future<void> markMoved(String oldPath, String newPath) async {
     await db.update(
       'files',

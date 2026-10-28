@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as pth;
 
 import '../app/controller.dart';
 import '../app/format.dart';
@@ -6,6 +7,7 @@ import '../app/theme.dart';
 import '../core/classify.dart';
 import '../core/models.dart';
 import '../native.dart';
+import 'folders.dart';
 import 'media.dart';
 import 'soft.dart';
 
@@ -398,9 +400,14 @@ class _GridPageState extends State<_GridPage> {
     return sum;
   }
 
-  Future<void> _apply({required bool move}) async {
+  Future<void> _apply({required String mode}) async {
     if (_working || _selected.isEmpty) return;
     final c = AppScope.read(context);
+    String? folder;
+    if (mode == 'folder') {
+      folder = await pickSafeFolder(context);
+      if (folder == null || !mounted) return;
+    }
     final paths = _selected.toList();
     final entries = await c.store.query(_query.copyWith(limit: 200000, offset: 0));
     final byPath = {for (final e in entries) e.path: e};
@@ -415,8 +422,10 @@ class _GridPageState extends State<_GridPage> {
       final e = byPath[path];
       if (e == null) continue;
       try {
-        if (move) {
+        if (mode == 'trash') {
           await c.moveToTrash(e);
+        } else if (mode == 'folder') {
+          await c.moveToFolder(e, folder!);
         } else {
           await c.keep(e);
         }
@@ -434,11 +443,14 @@ class _GridPageState extends State<_GridPage> {
       _working = false;
     });
     c.refreshCountsSoon();
+    final verb = mode == 'keep'
+        ? 'Kept'
+        : (mode == 'folder' ? 'Moved to ${pth.basename(folder!)}:' : 'Moved');
     showSoftSnack(
       context,
       failed == 0
-          ? '${move ? 'Moved' : 'Kept'} ${handled.length} files'
-          : '${move ? 'Moved' : 'Kept'} ${handled.length} files, $failed failed',
+          ? '$verb ${handled.length} files'
+          : '$verb ${handled.length} files, $failed failed',
     );
     _load(reset: true);
   }
@@ -501,7 +513,7 @@ class _GridPageState extends State<_GridPage> {
                 Expanded(
                   child: GridView.builder(
                     controller: _scroll,
-                    padding: EdgeInsets.only(bottom: selecting ? 100 : 24),
+                    padding: EdgeInsets.only(bottom: selecting ? 150 : 24),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
                       crossAxisSpacing: 10,
@@ -580,27 +592,38 @@ class _GridPageState extends State<_GridPage> {
                       child: Text('Working... $_done / $_total',
                           style: ts(context, 15, color: p.muted)),
                     )
-                  : Row(
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          flex: 2,
-                          child: SoftPill(
-                            label: 'Keep',
-                            color: p.keep,
-                            height: 56,
-                            onTap: () => _apply(move: false),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SoftPill(
+                                label: 'Keep',
+                                color: p.keep,
+                                height: 52,
+                                onTap: () => _apply(mode: 'keep'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SoftPill(
+                                label: 'To folder',
+                                icon: Icons.folder_special_outlined,
+                                color: p.accent,
+                                height: 52,
+                                onTap: () => _apply(mode: 'folder'),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 5,
-                          child: SoftPill(
-                            label:
-                                'Move ${formatInt(_selected.length)} to ToDelete · ${formatBytes(_selectedBytes)}',
-                            color: p.remove,
-                            height: 56,
-                            onTap: () => _apply(move: true),
-                          ),
+                        const SizedBox(height: 10),
+                        SoftPill(
+                          label:
+                              'Move ${formatInt(_selected.length)} to ToDelete · ${formatBytes(_selectedBytes)}',
+                          color: p.remove,
+                          height: 52,
+                          onTap: () => _apply(mode: 'trash'),
                         ),
                       ],
                     ),
