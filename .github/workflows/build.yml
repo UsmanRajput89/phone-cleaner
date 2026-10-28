@@ -54,8 +54,8 @@ jobs:
       - name: Test
         run: flutter test 2>&1 | tee -a build.log
 
-      - name: Build release APK
-        run: flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=APP_VERSION=v1.0.${{ github.run_number }} 2>&1 | tee -a build.log
+      - name: Build release APKs
+        run: flutter build apk --release --split-per-abi --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} --dart-define=APP_VERSION=v1.0.${{ github.run_number }} 2>&1 | tee -a build.log
 
       - name: Verify signing key
         run: |
@@ -63,22 +63,27 @@ jobs:
           SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           APKSIGNER="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)/apksigner"
           EXPECTED=$(keytool -list -v -keystore android_overlay/debug.keystore -storepass android 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ':' | tr 'A-F' 'a-f')
-          ACTUAL=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -m1 'SHA-256 digest' | sed 's/.*: *//' | tr 'A-F' 'a-f')
           echo "expected $EXPECTED" | tee -a build.log
-          echo "actual   $ACTUAL" | tee -a build.log
-          if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "SIGNING KEY MISMATCH" | tee -a build.log
-            exit 1
-          fi
+          for f in build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk; do
+            "$APKSIGNER" verify --min-sdk-version 24 "$f" 2>&1 | tee -a build.log
+            ACTUAL=$("$APKSIGNER" verify --print-certs "$f" | grep -m1 'SHA-256 digest' | sed 's/.*: *//' | tr 'A-F' 'a-f')
+            echo "actual   $ACTUAL ($f)" | tee -a build.log
+            if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+              echo "SIGNING KEY MISMATCH" | tee -a build.log
+              exit 1
+            fi
+          done
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk "PhoneCleaner-v1.0.${{ github.run_number }}.apk"
-          gh release create "v1.0.${{ github.run_number }}" "PhoneCleaner-v1.0.${{ github.run_number }}.apk" \
-            --title "Phone Cleaner v1.0.${{ github.run_number }}" \
-            --notes "Download PhoneCleaner-v1.0.${{ github.run_number }}.apk on your phone and install it over the old version." 2>&1 | tee -a build.log
+          V="1.0.${{ github.run_number }}"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "PhoneCleaner-v$V-arm64.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "PhoneCleaner-v$V-arm32.apk"
+          gh release create "v$V" "PhoneCleaner-v$V-arm64.apk" "PhoneCleaner-v$V-arm32.apk" \
+            --title "Phone Cleaner v$V" \
+            --notes "Install PhoneCleaner-v$V-arm64.apk (most phones). Use the arm32 file only if arm64 says it is not compatible. Updates install over the previous version." 2>&1 | tee -a build.log
 
       - name: Push logs
         if: always()
