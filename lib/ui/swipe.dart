@@ -9,18 +9,27 @@ import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/classify.dart';
 import '../core/models.dart';
+import 'dupes.dart';
 import 'folders.dart';
 import 'media.dart';
 import 'soft.dart';
 
 enum _Do { keep, trash, folder }
 
+class _Moved {
+  final FileEntry entry;
+  final String movedPath;
+
+  _Moved(this.entry, this.movedPath);
+}
+
 class _Act {
   final FileEntry entry;
   final _Do kind;
   final String? movedPath;
+  final List<_Moved> extras;
 
-  _Act(this.entry, this.kind, this.movedPath);
+  _Act(this.entry, this.kind, this.movedPath, [this.extras = const []]);
 }
 
 class SwipePage extends StatefulWidget {
@@ -28,7 +37,11 @@ class SwipePage extends StatefulWidget {
   final List<FileEntry>? entries;
   final String? title;
 
-  const SwipePage({super.key, this.entries, this.title});
+  /// Duplicate review: for each reviewed file, its identical copies. What you
+  /// decide for the file applies to every copy.
+  final Map<String, List<FileEntry>>? copies;
+
+  const SwipePage({super.key, this.entries, this.title, this.copies});
 
   @override
   State<SwipePage> createState() => _SwipePageState();
@@ -45,6 +58,8 @@ class _SwipePageState extends State<SwipePage>
   SortMode _sort = SortMode.oldest;
 
   bool get _fixed => widget.entries != null;
+  bool get _dupMode => widget.copies != null;
+  List<FileEntry> _extrasOf(FileEntry e) => widget.copies?[e.path] ?? const [];
   int _total = 0;
 
   int _batch = 0;
@@ -216,20 +231,29 @@ class _SwipePageState extends State<SwipePage>
     final c = AppScope.read(context);
     final entry = _queue.first;
     try {
+      _Act act;
       switch (what) {
         case _Do.keep:
           await c.keep(entry);
-          _history.add(_Act(entry, _Do.keep, null));
+          act = _Act(entry, _Do.keep, null);
           break;
         case _Do.trash:
           final trashPath = await c.moveToTrash(entry);
-          _history.add(_Act(entry, _Do.trash, trashPath));
+          act = _Act(entry, _Do.trash, trashPath);
           break;
         case _Do.folder:
           final moved = await c.moveToFolder(entry, c.targetFolder!);
-          _history.add(_Act(entry, _Do.folder, moved));
+          act = _Act(entry, _Do.folder, moved);
           break;
       }
+      // Duplicate review: every other copy goes to ToDelete in all cases.
+      final extras = <_Moved>[];
+      for (final x in _extrasOf(entry)) {
+        try {
+          extras.add(_Moved(x, await c.moveToTrash(x)));
+        } catch (_) {}
+      }
+      _history.add(_Act(act.entry, act.kind, act.movedPath, extras));
       if (_history.length > 20) _history.removeAt(0);
       HapticFeedback.selectionClick();
       if (!mounted) return;
@@ -268,6 +292,11 @@ class _SwipePageState extends State<SwipePage>
     final a = _history.removeLast();
     try {
       FileEntry back;
+      for (final x in a.extras) {
+        try {
+          await c.restore(x.movedPath, x.entry.path, Status.pending);
+        } catch (_) {}
+      }
       if (a.kind == _Do.keep) {
         await c.unkeep(a.entry);
         back = a.entry.copyWith(status: Status.pending);
@@ -509,7 +538,7 @@ class _SwipePageState extends State<SwipePage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ActionColumn(
-                  label: 'To delete',
+                  label: _dupMode ? 'Delete all' : 'To delete',
                   child: SoftIconButton(
                     icon: Icons.close_rounded,
                     label: 'Move to ToDelete',
@@ -544,7 +573,7 @@ class _SwipePageState extends State<SwipePage>
                 ),
                 const SizedBox(width: 16),
                 _ActionColumn(
-                  label: 'Keep',
+                  label: _dupMode ? 'Keep one' : 'Keep',
                   child: SoftIconButton(
                     icon: Icons.check_rounded,
                     label: 'Keep',
@@ -624,6 +653,7 @@ class _SwipePageState extends State<SwipePage>
             dy: _dy,
             folderName: target == null ? null : pth.basename(target),
             cacheWidth: cardCacheWidth,
+            copies: _extrasOf(entry),
           ),
         ),
       ),
@@ -664,6 +694,7 @@ class _PhotoCard extends StatelessWidget {
   final double dy;
   final String? folderName;
   final int cacheWidth;
+  final List<FileEntry> copies;
 
   const _PhotoCard({
     super.key,
@@ -672,18 +703,26 @@ class _PhotoCard extends StatelessWidget {
     required this.dy,
     required this.folderName,
     required this.cacheWidth,
+    this.copies = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final p = context.soft;
+    final n = copies.length;
+    final where = <String>{
+      if (n > 0) dupSource(entry.path),
+      for (final x in copies) dupSource(x.path),
+    }.join(', ');
     final up = dy < -30 && dy.abs() > dx.abs() * 1.2;
     final showRing = up || dx.abs() > 30;
     final toDelete = !up && dx < 0;
     final tint = up ? p.accent : (toDelete ? p.remove : p.keep);
     final chipText = up
         ? (folderName ?? 'Choose folder')
-        : (toDelete ? 'To delete' : 'Keep');
+        : (toDelete
+            ? (n > 0 ? 'Delete all ${n + 1}' : 'To delete')
+            : (n > 0 ? 'Keep 1, $n out' : 'Keep'));
     final folder = pth.basename(pth.dirname(entry.path));
     return Container(
       padding: const EdgeInsets.all(10),
@@ -746,6 +785,15 @@ class _PhotoCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: ts(context, 13, color: p.muted),
                     ),
+                    if (n > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${n + 1} identical copies: $where',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ts(context, 13, color: p.accent),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -5,8 +5,10 @@ import '../app/controller.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/models.dart';
+import '../native.dart';
 import 'media.dart';
 import 'soft.dart';
+import 'swipe.dart';
 
 /// Short, human label for where a copy lives.
 String dupSource(String path, {String safeRoot = AppController.safePath}) {
@@ -144,6 +146,86 @@ class _DuplicatesPageState extends State<DuplicatesPage> {
         : 'Moved ${r[0]}, ${r[1]} could not be moved');
   }
 
+  Future<void> _moveGroupAll(int index) async {
+    final g = _groups[index];
+    final c = AppScope.read(context);
+    final ok = await _confirm(context,
+        title: 'Move all ${g.members.length} copies?',
+        body: 'Every copy of this file goes to ToDelete, including the one '
+            'marked Keep (${formatBytes(g.size * g.members.length)}). '
+            'You can restore from ToDelete.',
+        action: 'Move all ${g.members.length}');
+    if (!ok || !mounted) return;
+    final r = await c.moveCopies(g.members);
+    if (!mounted) return;
+    await _refreshGroup(g.hash, index);
+    if (!mounted) return;
+    showSoftSnack(context, r[1] == 0
+        ? 'Moved ${r[0]} to ToDelete'
+        : 'Moved ${r[0]}, ${r[1]} could not be moved');
+  }
+
+  Future<void> _refreshGroup(String hash, int index) async {
+    final c = AppScope.read(context);
+    final ng = await c.store.dupGroupOf(hash);
+    if (!mounted) return;
+    setState(() {
+      if (ng == null) {
+        _groups.removeAt(index);
+      } else {
+        _groups[index] = ng;
+      }
+    });
+    c.refreshCountsSoon();
+  }
+
+  Future<void> _openCopy(int index, FileEntry e) async {
+    final g = _groups[index];
+    final isKeeper = identical(g.keeper, e);
+    final action = await Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) => _CopyPage(entry: e, isKeeper: isKeeper)));
+    if (!mounted || action == null) return;
+    if (action == 'keep') {
+      await _setKeeper(index, e);
+    } else if (action == 'move') {
+      final c = AppScope.read(context);
+      await c.moveCopies([e]);
+      if (!mounted) return;
+      await _refreshGroup(g.hash, index);
+      if (!mounted) return;
+      showSoftSnack(context, 'Moved 1 to ToDelete');
+    }
+  }
+
+  Future<void> _review() async {
+    final c = AppScope.read(context);
+    final keepers = <FileEntry>[];
+    final copies = <String, List<FileEntry>>{};
+    var off = 0;
+    while (true) {
+      final gs = await c.store.dupGroups(limit: 100, offset: off);
+      if (gs.isEmpty) break;
+      off += gs.length;
+      for (final g in gs) {
+        final k = g.keeper;
+        if (k.kind == Kind.other) continue;
+        keepers.add(k);
+        copies[k.path] = g.extras;
+      }
+      if (gs.length < 100) break;
+    }
+    if (!mounted) return;
+    if (keepers.isEmpty) {
+      showSoftSnack(context, 'No duplicate photos or videos to review');
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) =>
+            SwipePage(entries: keepers, copies: copies, title: 'Duplicates')));
+    c.refreshCountsSoon();
+    if (mounted) await _reload();
+  }
+
   Future<void> _moveAll() async {
     final c = AppScope.read(context);
     final s = c.dupStats;
@@ -244,6 +326,14 @@ class _DuplicatesPageState extends State<DuplicatesPage> {
                   if (s.extras > 0) ...[
                     const SizedBox(height: 12),
                     SoftPill(
+                      label: 'Review duplicates',
+                      icon: Icons.swipe_rounded,
+                      height: 46,
+                      color: pal.keep,
+                      onTap: _review,
+                    ),
+                    const SizedBox(height: 12),
+                    SoftPill(
                       label:
                           'Move all extras · ${formatBytes(s.bytes)}',
                       icon: Icons.drive_file_move_outlined,
@@ -281,8 +371,9 @@ class _DuplicatesPageState extends State<DuplicatesPage> {
                       child: _GroupCard(
                         group: _groups[i],
                         enabled: !busy,
-                        onPick: (e) => _setKeeper(i, e),
+                        onOpen: (e) => _openCopy(i, e),
                         onMove: () => _moveGroup(i),
+                        onMoveAll: () => _moveGroupAll(i),
                       ),
                     ),
                   ),
@@ -296,14 +387,16 @@ class _DuplicatesPageState extends State<DuplicatesPage> {
 class _GroupCard extends StatelessWidget {
   final DupGroup group;
   final bool enabled;
-  final void Function(FileEntry) onPick;
+  final void Function(FileEntry) onOpen;
   final VoidCallback onMove;
+  final VoidCallback onMoveAll;
 
   const _GroupCard({
     required this.group,
     required this.enabled,
-    required this.onPick,
+    required this.onOpen,
     required this.onMove,
+    required this.onMoveAll,
   });
 
   @override
@@ -321,7 +414,7 @@ class _GroupCard extends StatelessWidget {
             style: ts(context, 14, weight: FontWeight.w500),
           ),
           const SizedBox(height: 2),
-          Text('Tap a copy to keep that one instead',
+          Text('Tap a copy to look at it or choose it as the one to keep',
               style: ts(context, 12, color: pal.muted)),
           const SizedBox(height: 12),
           SizedBox(
@@ -335,7 +428,7 @@ class _GroupCard extends StatelessWidget {
                 final keep = e.dup == 1 || (i == 0 && group.members.every((m) => m.dup != 1));
                 return SoftTap(
                   label: keep ? 'Kept copy' : 'Keep this copy',
-                  onTap: enabled ? () => onPick(e) : null,
+                  onTap: enabled ? () => onOpen(e) : null,
                   child: SizedBox(
                     width: 88,
                     child: Column(
@@ -378,7 +471,101 @@ class _GroupCard extends StatelessWidget {
             color: pal.remove,
             onTap: enabled ? onMove : null,
           ),
+          const SizedBox(height: 10),
+          SoftPill(
+            label: 'Move all $n copies',
+            height: 42,
+            color: pal.muted,
+            onTap: enabled ? onMoveAll : null,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Full-size look at one copy, with the choices for it.
+class _CopyPage extends StatelessWidget {
+  final FileEntry entry;
+  final bool isKeeper;
+
+  const _CopyPage({required this.entry, required this.isKeeper});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.soft;
+    return SoftScaffold(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                SoftIconButton(
+                  icon: Icons.arrow_back_rounded,
+                  label: 'Back',
+                  onTap: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(isKeeper ? 'Kept copy' : 'Extra copy',
+                      style: ts(context, 20)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: GestureDetector(
+                onTap: entry.kind == Kind.video
+                    ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => VideoPage(path: entry.path)))
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: raisedDeco(pal, radius: 24),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: MediaThumb(
+                        entry: entry,
+                        cacheWidth: 1200,
+                        showPlay: true,
+                        fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(entry.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ts(context, 15, weight: FontWeight.w500)),
+            const SizedBox(height: 2),
+            Text(
+                '${formatBytes(entry.size)} · ${formatDate(entry.mtime)} · ${dupSource(entry.path)}',
+                style: ts(context, 12, color: pal.muted)),
+            const SizedBox(height: 14),
+            if (!isKeeper) ...[
+              SoftPill(
+                  label: 'Keep this one',
+                  color: pal.keep,
+                  height: 46,
+                  onTap: () => Navigator.of(context).pop('keep')),
+              const SizedBox(height: 10),
+            ],
+            SoftPill(
+                label: 'Open in app',
+                color: pal.accent,
+                height: 46,
+                onTap: () => Native.openFile(entry.path)),
+            const SizedBox(height: 10),
+            SoftPill(
+                label: 'Move this copy to ToDelete',
+                color: pal.remove,
+                height: 46,
+                onTap: () => Navigator.of(context).pop('move')),
+          ],
+        ),
       ),
     );
   }

@@ -149,6 +149,10 @@ class Store {
     if (hideDupes && q.status == Status.pending) {
       parts.add('dup != 2');
     }
+    if (q.twinsOnly) {
+      parts.add('hash IS NOT NULL AND hash IN (SELECT hash FROM files '
+          'WHERE hash IS NOT NULL GROUP BY hash HAVING COUNT(*) > 1)');
+    }
     if (q.duplicatesOnly) {
       parts.add('(size, $_baseName) IN (SELECT size, $_baseName FROM files '
           "WHERE status = 0 AND kind = 'other' GROUP BY 1, 2 HAVING COUNT(*) > 1)");
@@ -440,6 +444,20 @@ class Store {
         'AND status IN (0, 1) GROUP BY hash HAVING COUNT(*) > 1 '
         'ORDER BY (COUNT(*) - 1) * size DESC, hash ASC LIMIT ? OFFSET ?',
         [limit, offset]);
+    return _buildGroups(heads);
+  }
+
+  /// One group, freshly read; null once fewer than two copies are left.
+  Future<DupGroup?> dupGroupOf(String hash) async {
+    final heads = await db.rawQuery(
+        'SELECT hash, size, COUNT(*) AS c FROM files WHERE hash = ? '
+        'AND status IN (0, 1) GROUP BY hash HAVING COUNT(*) > 1',
+        [hash]);
+    final g = await _buildGroups(heads);
+    return g.isEmpty ? null : g.first;
+  }
+
+  Future<List<DupGroup>> _buildGroups(List<Map<String, Object?>> heads) async {
     if (heads.isEmpty) return [];
     final hashes = [for (final h in heads) h['hash'] as String];
     final rows = await db.rawQuery(

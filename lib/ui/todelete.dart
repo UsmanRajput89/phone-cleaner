@@ -66,6 +66,9 @@ class _ToDeletePageState extends State<ToDeletePage> {
       case 'files':
         kinds = const [Kind.other];
         break;
+      case 'dupes':
+        kinds = const [Kind.image, Kind.video, Kind.other];
+        break;
       default:
         kinds = const [Kind.image, Kind.video, Kind.other];
     }
@@ -74,6 +77,7 @@ class _ToDeletePageState extends State<ToDeletePage> {
       kinds: kinds,
       sort: SortMode.newest,
       limit: pageSize,
+      twinsOnly: _filter == 'dupes',
     );
   }
 
@@ -340,6 +344,7 @@ class _ToDeletePageState extends State<ToDeletePage> {
                       ['photos', 'Photos'],
                       ['videos', 'Videos'],
                       ['files', 'Files'],
+                      ['dupes', 'Duplicates'],
                     ]) ...[
                       SoftChip(
                         label: f[1],

@@ -136,6 +136,25 @@ void main() {
       expect(await store.count(const FileQuery(limit: 100)), 3);
     });
 
+    test('twinsOnly finds files with an identical twin, trashed or not', () async {
+      await store.markMoved('$old/a.jpg', '/storage/emulated/0/ToDelete/o.jpg');
+      final rows = await store.query(const FileQuery(
+          status: Status.todelete, twinsOnly: true, limit: 100));
+      expect(rows.length, 1);
+      final none = await store.query(const FileQuery(
+          status: Status.pending, kinds: [Kind.image], twinsOnly: true,
+          buckets: [Bucket.whatsapp], limit: 100));
+      expect(none.map((e) => e.path).contains('$wa/solo.jpg'), isFalse);
+    });
+
+    test('dupGroupOf reads one group and is null when only one copy is left', () async {
+      expect((await store.dupGroupOf('100-x'))!.members.length, 3);
+      await store.markMoved('$old/a.jpg', '/storage/emulated/0/ToDelete/o.jpg');
+      await store.markMoved('/storage/emulated/0/DCIM/Camera/a.jpg',
+          '/storage/emulated/0/ToDelete/c.jpg');
+      expect(await store.dupGroupOf('100-x'), isNull);
+    });
+
     test('setKeeper switches the kept copy', () async {
       await store.setKeeper('100-x', '$old/a.jpg');
       final g = (await store.dupGroups()).single;

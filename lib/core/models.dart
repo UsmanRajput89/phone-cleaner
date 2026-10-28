@@ -103,6 +103,9 @@ class FileQuery {
   final String? month; // 'YYYY-MM'
   final bool duplicatesOnly;
 
+  /// Only files that have a byte-identical twin somewhere (any status).
+  final bool twinsOnly;
+
   const FileQuery({
     this.status = Status.pending,
     this.kinds = const [Kind.image, Kind.video, Kind.other],
@@ -122,6 +125,7 @@ class FileQuery {
     this.pathPrefix,
     this.month,
     this.duplicatesOnly = false,
+    this.twinsOnly = false,
   });
 
   FileQuery copyWith({
@@ -137,6 +141,7 @@ class FileQuery {
     String? pathPrefix,
     String? month,
     bool? duplicatesOnly,
+    bool? twinsOnly,
   }) {
     return FileQuery(
       status: status ?? this.status,
@@ -151,6 +156,7 @@ class FileQuery {
       pathPrefix: pathPrefix ?? this.pathPrefix,
       month: month ?? this.month,
       duplicatesOnly: duplicatesOnly ?? this.duplicatesOnly,
+      twinsOnly: twinsOnly ?? this.twinsOnly,
     );
   }
 }

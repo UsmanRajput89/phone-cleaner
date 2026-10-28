@@ -173,6 +173,22 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// Moves the given files into ToDelete, one by one. Returns [moved, failed, bytes].
+  Future<List<int>> moveCopies(List<FileEntry> files) async {
+    var moved = 0, failed = 0, bytes = 0;
+    for (final e in files) {
+      try {
+        await moveToTrash(e);
+        moved++;
+        bytes += e.size;
+      } catch (_) {
+        failed++;
+      }
+    }
+    refreshCountsSoon();
+    return [moved, failed, bytes];
+  }
+
   /// Moves every extra copy, one batch of groups at a time.
   Future<List<int>> moveAllExtras() async {
     if (dupMoving || dupScanning) return [0, 0, 0];
